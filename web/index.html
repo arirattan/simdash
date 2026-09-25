@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SimDash">
+<meta name="theme-color" content="#0b0d10">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="img/icon.svg">
+<title>SimDash Cockpit</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- Home: pick a dashboard -->
+<section id="home" class="view">
+  <div class="home-inner">
+    <h1>SimDash <span>cockpit panels for DCS &amp; MSFS 2024 via SimHub</span></h1>
+    <div id="dash-list" class="dash-list"></div>
+    <div class="home-status"><span class="pill" id="home-pill">connecting…</span> <button class="icon-btn light-btn" id="btn-light-home" aria-label="Panel lighting">☀</button></div>
+    <p class="hint">Tip: in Safari tap <b>Share → Add to Home Screen</b> to run full-screen with no browser bars.</p>
+  </div>
+</section>
+
+<!-- Dashboard -->
+<section id="dash" class="view hidden">
+  <header class="topbar">
+    <button class="icon-btn" id="btn-home" aria-label="Home">☰</button>
+    <div class="title" id="dash-title"></div>
+    <nav class="tabs" id="tabs"></nav>
+    <span class="pill" id="pill">…</span>
+    <button class="icon-btn light-btn" id="btn-light" aria-label="Panel lighting">☀</button>
+    <button class="icon-btn" id="btn-menu" aria-label="Settings">⚙</button>
+  </header>
+  <main id="pages"></main>
+</section>
+
+<!-- Settings menu -->
+<div id="menu" class="sheet hidden">
+  <div class="sheet-card">
+    <h2>Settings</h2>
+    <button class="menu-item" data-act="inspect">Property inspector <small>see which values arrive from SimHub</small></button>
+    <div class="menu-block">
+      <div class="menu-label">Panel lighting <small>(the ☀ button in the top bar cycles these)</small></div>
+      <div class="seg" id="light-seg">
+        <button data-mode="day">☀ Day</button>
+        <button data-mode="night">☾ Night <small>red</small></button>
+        <button data-mode="nvg">◉ NVG <small>green</small></button>
+      </div>
+      <div class="menu-label">Brightness <span id="dim-val"></span></div>
+      <input type="range" id="dim" min="25" max="100" step="5" value="100">
+    </div>
+    <button class="menu-item" data-act="log">Show button log <small>displays each input name as you press it — handy while binding in SimHub</small></button>
+    <button class="menu-item" data-act="reload">Reload</button>
+    <button class="menu-item close" data-act="close">Close</button>
+  </div>
+</div>
+
+<!-- Property inspector -->
+<div id="inspector" class="sheet hidden">
+  <div class="sheet-card wide">
+    <div class="insp-head"><h2>Property inspector</h2><span id="insp-meta"></span><button class="icon-btn" id="insp-close">✕</button></div>
+    <p class="hint">Green = value is arriving. Grey = none of the candidate SimHub properties has data yet — find the right name in SimHub › Available properties and add it to <code>bridge/properties.json</code> (it reloads automatically).</p>
+    <div class="insp-table-wrap"><table id="insp-table"><thead><tr><th>Key</th><th>Value</th><th>Using SimHub property</th><th>Candidates</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<div id="input-log" class="hidden"></div>
+<div id="dimmer"></div>
+
+<script src="js/gauges.js"></script>
+<script src="js/link.js"></script>
+<script src="js/controls.js"></script>
+<script src="js/dashboards.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
