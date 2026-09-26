@@ -442,7 +442,7 @@ body.mode-night .dknob, body.mode-nvg .dknob { filter: brightness(0.5); }
   flex: none; display: flex; flex-direction: column; align-items: center; gap: 1px; padding-top: 4px;
   border-top: 1px solid #2c2c2c; font-size: 11px; color: #9aa3ad; text-align: center;
 }
-.g1k-sk-hint span { font-size: 10px; color: #6b7480; }
+.g1k-sk-hint span { font-size: 12px; line-height: 1.35; color: var(--amber); padding: 0 8px; }
 .g1k-sk-hint span:empty { display: none; }
 .g1k-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; }
 .g1k-modes { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }

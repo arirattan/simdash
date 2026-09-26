@@ -293,6 +293,9 @@ class Bridge:
                 await self.respond(writer, method, "200 OK", ctype, body)
             except (LookupError, OSError, ValueError) as e:
                 await self.respond(writer, method, "503 Service Unavailable", "text/plain; charset=utf-8", str(e).encode())
+            except Exception as e:  # show anything else on the iPad too, instead of a dropped connection
+                log(f"Screens: capture error: {e!r}")
+                await self.respond(writer, method, "503 Service Unavailable", "text/plain; charset=utf-8", repr(e).encode())
             return
         if path == "/api/screens":
             await self.respond(writer, method, "200 OK", "application/json", json.dumps(self.screens.info()).encode())

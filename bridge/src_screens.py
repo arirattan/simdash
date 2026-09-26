@@ -71,6 +71,10 @@ if WIN:
     gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
     gdi32.BitBlt.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                              wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.DWORD]
+    gdi32.StretchBlt.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                 wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.DWORD]
+    gdi32.SetStretchBltMode.argtypes = [wintypes.HDC, ctypes.c_int]
+    gdi32.SetBrushOrgEx.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
     gdi32.GetDIBits.argtypes = [wintypes.HDC, wintypes.HBITMAP, wintypes.UINT, wintypes.UINT,
                                 ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT]
     gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
@@ -82,6 +86,13 @@ if WIN:
     user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
     user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
     user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
 
@@ -95,31 +106,40 @@ if WIN:
         _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", wintypes.DWORD * 3)]
 
 SRCCOPY = 0x00CC0020
-MAX_SIDE = 2048
+HALFTONE = 4
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+MAX_SIDE = 1600  # bigger captures (e.g. a maximised pop-out) are scaled down to fit: lighter on Wi-Fi
 
-# MSFS pop-outs (Right-Alt + click an instrument) are untitled windows of class AceApp (Pop Out Panel Manager
-# renames them "Custom - PFD" / "... (Custom)"). Counted left to right, so the PFD goes left of (or above) the MFD.
+# MSFS pop-outs (Right-Alt + click an instrument) are untitled windows of the sim (class AceApp; Pop Out Panel
+# Manager renames them "Custom - PFD" / "... (Custom)"). Counted left to right, so the PFD goes left of (or above)
+# the MFD.
 DEFAULTS = {
     "G1000_PFD": {"label": "G1000 PFD (MSFS pop-out 1)", "popout": 1},
     "G1000_MFD": {"label": "G1000 MFD (MSFS pop-out 2)", "popout": 2},
 }
 
 
-def grab_bgra(x, y, w, h):
-    """Desktop pixels -> top-down BGRA bytes."""
+def grab_bgra(x, y, w, h, ow, oh):
+    """Desktop pixels -> top-down BGRA bytes, scaled to ow x oh."""
     screen = user32.GetDC(None)
     mem = gdi32.CreateCompatibleDC(screen)
-    bmp = gdi32.CreateCompatibleBitmap(screen, w, h)
+    bmp = gdi32.CreateCompatibleBitmap(screen, ow, oh)
     old = gdi32.SelectObject(mem, bmp)
     try:
-        if not gdi32.BitBlt(mem, 0, 0, w, h, screen, x, y, SRCCOPY):
-            raise OSError("screen capture failed (BitBlt)")
+        if (ow, oh) == (w, h):
+            if not gdi32.BitBlt(mem, 0, 0, w, h, screen, x, y, SRCCOPY):
+                raise OSError("screen capture failed (BitBlt)")
+        else:
+            gdi32.SetStretchBltMode(mem, HALFTONE)
+            gdi32.SetBrushOrgEx(mem, 0, 0, None)
+            if not gdi32.StretchBlt(mem, 0, 0, ow, oh, screen, x, y, w, h, SRCCOPY):
+                raise OSError("screen capture failed (StretchBlt)")
         bmi = BITMAPINFO()
         bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-        bmi.bmiHeader.biWidth, bmi.bmiHeader.biHeight = w, -h  # negative = top-down rows
+        bmi.bmiHeader.biWidth, bmi.bmiHeader.biHeight = ow, -oh  # negative = top-down rows
         bmi.bmiHeader.biPlanes, bmi.bmiHeader.biBitCount = 1, 32
-        buf = ctypes.create_string_buffer(w * h * 4)
-        if gdi32.GetDIBits(mem, bmp, 0, h, buf, ctypes.byref(bmi), 0) != h:
+        buf = ctypes.create_string_buffer(ow * oh * 4)
+        if gdi32.GetDIBits(mem, bmp, 0, oh, buf, ctypes.byref(bmi), 0) != oh:
             raise OSError("screen capture failed (GetDIBits)")
         return buf.raw
     finally:
@@ -160,32 +180,67 @@ def client_rect(hwnd):
     return p.x, p.y, r.right, r.bottom
 
 
-def msfs_popouts():
-    """MSFS pop-out instrument windows, left to right (then top to bottom)."""
+_exe = {}
+
+
+def process_name(hwnd):
+    """Lower-case exe name of the process that owns a window ('' if it can't be read)."""
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    if pid.value not in _exe:
+        name, h = "", kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+        if h:
+            b, n = ctypes.create_unicode_buffer(1024), wintypes.DWORD(1024)
+            if kernel32.QueryFullProcessImageNameW(h, 0, b, ctypes.byref(n)):
+                name = b.value.replace("/", "\\").rsplit("\\", 1)[-1].lower()
+            kernel32.CloseHandle(h)
+        if len(_exe) > 500:
+            _exe.clear()
+        _exe[pid.value] = name
+    return _exe[pid.value]
+
+
+def msfs_windows():
+    """Visible windows of the sim (class AceApp, or FlightSimulator*.exe): [(title, x, y, w, h, hwnd)]."""
     found = []
 
     def cb(hwnd, _):
         if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd):
             b = ctypes.create_unicode_buffer(32)
             user32.GetClassNameW(hwnd, b, 32)
-            title = window_title(hwnd).lower() if b.value == "AceApp" else None
-            if title is not None and (not title or "custom" in title):  # not the main window, ATC, VFR map...
+            if b.value == "AceApp" or process_name(hwnd).startswith("flightsimulator"):
                 x, y, w, h = client_rect(hwnd)
                 if w >= 64 and h >= 64:
-                    found.append((x, y, hwnd))
+                    found.append((window_title(hwnd), x, y, w, h, hwnd))
         return True
 
     user32.EnumWindows(EnumWindowsProc(cb), 0)
-    return [hwnd for _, _, hwnd in sorted(found)]
+    return found
 
 
-def window_rect(spec):
+def msfs_popouts(wins):
+    """The sim's pop-out windows: untitled ones (or renamed by Pop Out Panel Manager) left to right (then top to
+    bottom), then any other window of the sim except the main one and its multi-monitor views."""
+    main = max((t for t in wins if "microsoft flight simulator" in t[0].lower()), key=lambda t: t[3] * t[4], default=None)
+    pops = [t for t in wins if t is not main and "WINDOW" not in t[0]]
+    rank = lambda t: (0 if not t[0] or "custom" in t[0].lower() else 1, t[1], t[2])
+    return sorted(pops, key=rank)
+
+
+def describe(wins):
+    return ", ".join(f"'{t[0][:40]}' {t[3]}x{t[4]}" for t in wins[:5]) or "none"
+
+
+def window_rect(spec, wins=None):
     if "popout" in spec:
-        n, pops = int(spec["popout"]), msfs_popouts()
+        wins = msfs_windows() if wins is None else wins
+        n, pops = int(spec["popout"]), msfs_popouts(wins)
         if not 0 < n <= len(pops):
-            raise LookupError(f"MSFS pop-out {n} not found ({len(pops)} open): in the cockpit, Right-Alt + click the PFD, "
-                              "then the MFD, and keep them visible on the PC screen")
-        hwnd = pops[n - 1]
+            if not wins:
+                raise LookupError("no MSFS window on this PC - is the sim running here, and not minimised?")
+            raise LookupError(f"MSFS pop-out {n} not found ({len(pops)} open): in the cockpit, hold Right-Alt and click "
+                              f"the PFD, then the MFD, and keep them visible on the PC screen. MSFS windows seen: {describe(wins)}")
+        hwnd = pops[n - 1][5]
     else:
         hwnd = find_window(spec["window"])
         if not hwnd:
@@ -280,6 +335,7 @@ class Screens:
         self.demo, self.demo_flir = demo, None
         self.conf, self.mtime, self.checked = {}, None, 0.0
         self.cache, self.locks = {}, {}
+        self.seen = None  # MSFS pop-outs last reported in the bridge window
 
     def demo_only(self):
         return self.demo and not self.config().get("screens")
@@ -329,14 +385,33 @@ class Screens:
                 "format": "jpeg" if Image is not None else "png", "error": err}
 
     # ---------- capture ----------
+    def report(self, wins):
+        """Say in the bridge window which MSFS pop-outs were found, whenever that changes."""
+        pops = msfs_popouts(wins)
+        seen = [(t[0], t[3], t[4]) for t in pops]
+        if seen != self.seen:
+            self.seen = seen
+            if pops:
+                self.log("Screens: MSFS pop-outs, left to right: " + ", ".join(
+                    f"#{i} {t[3]}x{t[4]}" + (f" '{t[0][:30]}'" if t[0] else "") for i, t in enumerate(pops, 1)))
+            else:
+                self.log(f"Screens: no MSFS pop-out yet (MSFS windows seen: {describe(wins)}) - "
+                         "in the cockpit, hold Right-Alt and click the PFD, then the MFD")
+
     def grab(self, spec):
-        if "window" in spec or "popout" in spec:
+        if "popout" in spec:
+            wins = msfs_windows()
+            self.report(wins)
+            x, y, w, h = window_rect(spec, wins)
+        elif "window" in spec:
             x, y, w, h = window_rect(spec)
         else:
             x, y, w, h = (int(spec[k]) for k in ("x", "y", "w", "h"))
-        if not (0 < w <= MAX_SIDE and 0 < h <= MAX_SIDE):
+        if w <= 0 or h <= 0:
             raise ValueError(f"bad size {w}x{h}")
-        return encode(grab_bgra(x, y, w, h), w, h, int(self.config().get("quality", 70)))
+        k = min(1.0, MAX_SIDE / max(w, h))
+        ow, oh = max(1, round(w * k)), max(1, round(h * k))
+        return encode(grab_bgra(x, y, w, h, ow, oh), ow, oh, int(self.config().get("quality", 70)))
 
     async def frame(self, name):
         """(content type, bytes) of the newest picture of screen `name`; raises LookupError / OSError."""

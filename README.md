@@ -105,6 +105,12 @@ bridge streams the sim's own PFD / MFD into the bezel (Windows):
 3. The G1000 page shows **● LIVE** and the picture fills the bezel. The softkey row is exactly as wide as the picture, so
    each key sits under its label.
 
+If it says **NO SIGNAL**, the amber line under it says why, and the bridge window lists the pop-outs it found
+(`Screens: MSFS pop-outs, left to right: #1 1024x768 …`) or the MSFS windows it can see. "0 open" means no pop-out
+window exists yet: in the 3D cockpit, hold **Right-Alt** (the Alt key right of the space bar) and left-click on the PFD
+screen itself. A separate window with only the PFD appears; it can open small or behind the sim, so look for it.
+Very large pop-outs are scaled down for Wi-Fi.
+
 The bridge finds the pop-outs by itself and counts them left to right: the 1st is the PFD, the 2nd the MFD. To pick
 them yourself (e.g. only the MFD popped out), set `G1000_PFD` / `G1000_MFD` in `bridge/data/screens.json`:
 `"G1000_MFD": {"popout": 1}` (1st pop-out), `{"window": "MFD"}` (window title, e.g. renamed by Pop Out Panel Manager),
