@@ -139,6 +139,8 @@
       make: (c) => GA().Lever({ title: (c.label || '').toUpperCase(), key: c.key, event: c.event || 'THROTTLE_SET', cls: c.color || 'throttle' }), title: (c) => c.label },
     cockpit: { name: 'Cockpit control', icon: '🎛', size: [1, 1], fields: [['control', 'Control of the current aircraft', 'cockpit']],
       make: cockpitWidget, title: (c) => (c.control ? c.control.d : '') },
+    screen: { name: 'Live screen', icon: '📺', size: [2, 2], fields: [['screen', 'Screen (set up with setup-screens.bat or bridge/data/screens.json)', 'screen']],
+      make: (c) => global.Screens.View([c.screen || 'LEFT_MFCD'], { cls: 'cp-screen' }), title: (c) => c.screen || 'LEFT_MFCD' },
     label: { name: 'Label', icon: 'T', size: [2, 1], fields: [['text', 'Text', 'text'], ['size', 'Size', 'select', [['sm', 'Small'], ['md', 'Medium'], ['lg', 'Large']]]],
       make: label, title: (c) => c.text },
   };
@@ -347,6 +349,21 @@
       } else if (type === 'bool') {
         inp = el('input', { type: 'checkbox', class: 'cp-check' }, row);
         inp.checked = !!values[k];
+      } else if (type === 'screen') {   // live screens the bridge knows about
+        inp = el('select', { class: 'cp-in' }, row);
+        let cur = values[k] || '';
+        const fill = (list) => {
+          inp.innerHTML = '';
+          list.forEach(([v, n]) => { const o = el('option', { text: n }, inp); o.value = v; });
+          inp.value = cur;
+        };
+        fill([[cur || 'LEFT_MFCD', cur || 'LEFT_MFCD']]);
+        global.Screens.list().then((i) => {
+          cur = cur || (i.screens[0] || {}).name || 'LEFT_MFCD';   // new widget: first screen the bridge has
+          const names = i.screens.map((x) => [x.name, `${x.label} (${x.name})`]);
+          if (!names.some(([n]) => n === cur)) names.unshift([cur, cur + (i.screens.length ? '' : '  - live screens not set up yet')]);
+          fill(names);
+        });
       } else if (type === 'cockpit') {
         inp = el('button', { class: 'cp-in cp-pick', type: 'button', text: values[k] ? `${values[k].d}  (${values[k].id})` : 'Choose a control…' }, row);
         inp._val = values[k] || null;   // a control object - not a string, so keep it off .value

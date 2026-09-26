@@ -869,3 +869,78 @@ body.mode-night .hv-svg, body.mode-nvg .hv-svg { filter: brightness(0.75); }
 .cp-cell > .readout { width: 100%; align-self: center; }
 .cp-cell > .bar-gauge { width: 100%; }
 .cp-cell > .bc { width: 100%; }
+
+/* ---------------------------------------------------------------- F-14 Tomcat page (reuses the ah-* Apache kit) */
+.f14-flight { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(140px, 0.75fr); grid-template-rows: 1fr 1fr; gap: 8px; }
+.f14-flight .ah-flight-side { justify-content: space-evenly; }
+.f14-flight .aoa-indexer svg { width: 46px; }
+.f14-disp { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.f14-disp-v {
+  font-family: var(--digital-font); background: #020a02; color: #7dff6e; border: 1px solid #0a0a0a; border-radius: 4px;
+  padding: 5px 8px; font-size: 18px; text-align: center; min-height: 1.6em; white-space: pre; overflow: hidden; text-shadow: 0 0 6px #2fff2f55;
+}
+.f14-disp.big { grid-column: span 2; }
+.f14-disp.big .f14-disp-v { font-size: 26px; }
+.f14-step .ah-pot-v { flex: 1.4; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* RIO computer address panel */
+.ah-group.f14-cap { grid-column: span 2; }
+.f14-cap > .ah-seg { margin-bottom: 10px; }
+.ah-group-b > .ah-seg.row { grid-column: 1 / -1; }
+.f14-cap-b { display: grid; grid-template-columns: 2fr 3fr; gap: 12px; }
+.f14-cap-fn { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: start; }
+.f14-cap-fn .ah-btn { min-height: 40px; }
+.f14-cap-pad { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 52px; gap: 6px; }
+.f14-cap-pad .ah-btn.ent { grid-column: span 2; }
+.f14-cap-sub { font-size: 9px; letter-spacing: 1px; color: #ffd166; font-weight: 700; }
+
+/* pilot caution / advisory panel */
+.ah-group.f14-caution { grid-column: 1 / -1; }
+.f14-caution .ah-group-b { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.f14-caution .ah-lamp { min-height: 40px; font-size: 10px; letter-spacing: 0.5px; }
+
+body.mode-night .f14-disp-v { color: #ff8a70; text-shadow: none; background: #0a0202; }
+body.mode-nvg .f14-disp-v { color: #9dff8a; }
+@media (max-width: 1100px) {
+  .f14-flight { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(150px, 1fr)); overflow-y: auto; }
+}
+
+/* ---------------------------------------------------------------- live screens (screens.js) */
+.scr { position: relative; width: 100%; height: 100%; min-height: 0; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.scr-img { width: 100%; height: 100%; object-fit: contain; display: none; }
+.scr.live .scr-img { display: block; }
+.scr-msg { color: #5d6e5d; font: 700 12px/1.6 var(--digital-font); text-align: center; white-space: pre-line; letter-spacing: 1px; padding: 12px; }
+.scr.live .scr-msg { display: none; }
+.scr.quiet:not(.live) { display: none; }
+.scr.ah-live { position: absolute; inset: 0; z-index: 3; }
+.scr.cp-screen { border-radius: 6px; }
+.ah-mpd-screen { position: relative; }
+body.mode-night .scr-img, body.mode-nvg .scr-img { filter: brightness(0.8); }
+
+/* Apache TADS · TEDAC page */
+.ah-tads { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 10px; }
+.ah-tedac {
+  display: grid; grid-template-columns: 70px minmax(0, 1fr) 136px; grid-template-rows: auto minmax(0, 1fr) 50px; gap: 6px; min-height: 0;
+  background: linear-gradient(#303235, #1e2022); border: 2px solid #0d0d0d; border-radius: 16px; padding: 8px;
+}
+.ah-tedac-top { grid-column: 1 / -1; display: flex; gap: 10px; justify-content: center; align-items: end; flex-wrap: wrap; }
+.ah-tedac-top .ah-rocker { flex-direction: row; width: auto; align-items: center; gap: 4px; }
+.ah-tedac-top .ah-rocker .ah-btn { min-width: 40px; }
+.ah-tedac-side { grid-row: 2; display: flex; flex-direction: column; justify-content: space-around; gap: 6px; min-height: 0; }
+.ah-tedac-side .ah-rocker { width: auto; }
+.ah-tedac-screen { grid-column: 2; grid-row: 2; position: relative; background: #000; border: 3px solid #0a0a0a; border-radius: 4px; min-height: 0; overflow: hidden; }
+.ah-tedac-screen .scr.ah-live { position: absolute; inset: 0; }
+.ah-tedac-name { position: absolute; top: 4px; left: 0; right: 0; font-size: 10px; letter-spacing: 3px; color: #4a4a4a; text-align: center; z-index: 4; pointer-events: none; }
+.ah-tedac-bot { grid-column: 1 / -1; grid-row: 3; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.ah-tedac-bot .ah-btn { min-height: 0; height: 100%; }
+.ah-panels.ah-tads-grips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ah-dpad { display: flex; flex-direction: column; gap: 4px; }
+.ah-group-b > .ah-dpad { grid-column: span 2; }
+.ah-dpad-g { display: grid; grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 38px); gap: 4px; justify-content: center; }
+.ah-dpad-g .ah-btn { min-height: 0; padding: 0; }
+body.mode-night .ah-tedac, body.mode-nvg .ah-tedac { background: linear-gradient(#141212, #0b0a0a); }
+@media (max-width: 1100px) {
+  .ah-tads { grid-template-columns: 1fr; overflow-y: auto; }
+  .ah-tedac { min-height: 560px; }
+  .ah-panels.ah-tads-grips { overflow: visible; }
+}

@@ -66,7 +66,11 @@ The bridge connects **directly to the sims**, so SimHub isn't needed:
   - Radar altimeter, levers and turboprop gauges (torque, ITT, Ng, prop RPM).
   - If the drop door doesn't react, swap the two numbers of `DROP_OPEN` / `DROP_CLOSE` in `bridge/msfs.json`.
 - **Civil aircraft · Civil helicopter · Military jet · Military helicopter:** instrument panels with touch controls.
-- **AH-64D Apache** (DCS): MPDs, EUFD + keyboard, and fire / arm / CMWS panels.
+- **AH-64D Apache** (DCS): MPDs with the **live MPD pictures**, a **TADS · TEDAC** page with the **live FLIR / TV picture**,
+  EUFD + keyboard, and fire / arm / CMWS panels.
+- **F-14 Tomcat** (DCS): pilot and RIO seats with every panel: master arm, engine / fuel, gear, AFCS, the full caution
+  panel, radios, the RIO's CAP keypad, radar / DDD / TID controls, countermeasures and armament.
+- **Live screens:** the real cockpit displays streamed from DCS to the iPad (FLIR, FCR radar, TSD, MFDs; see section 3b).
 - **Cockpit:** builds a touch panel for *every* control of the aircraft you're flying, read live from the sim:
   - **MSFS 2024/2020:** every clickable switch, button and knob of the loaded aircraft, from the sim's own
     "input events" (C172, C152, Caravan, Cabri G2, H125, add-ons…).
@@ -122,9 +126,54 @@ doesn't have are hidden automatically.
   start, APU, rotor brake, master ignition, CMWS (flare/chaff counts + threat sectors), emergency panel, and lights.
 - **FLIGHT:** airspeed, attitude, altimeter, radar altimeter, heading, VSI and engine RPM, from SimDash.lua.
 
+- **TADS · TEDAC** (the CPG's sight): the live TEDAC picture (TADS FLIR / TV / DVO, or FCR / PNV / G/S video) in its bezel with
+  the video-select keys, SYM / BRT / CON, FLIR GAIN / LEV, R/F, EL, AZ, * / BORESIGHT / ACM / FREEZE / FILTER. Next to it are
+  the handgrip switches: sensor select, FOV, IAT / OFS, LMC, laser tracker, STORE / UPDT, sight slave, manual tracker, sight
+  select, weapons action, FCR mode / scan, cued search, C-scope and the cursor. Needs live screens (section 3b).
+- With live screens set up, the MPD page shows the **real MPD pictures** (TSD, FCR radar, video / FLIR, engine pages...) inside
+  the bezels; otherwise it shows flight data and the EUFD text as before.
+
+**F-14 Tomcat dashboard** (needs DCS-BIOS; F-14A and F-14B). **SEAT** switches between PILOT and RIO. Switch positions and
+labels come from DCS-BIOS, and controls your version doesn't have (e.g. the F-14B(U) ALE-47) are hidden.
+- **Pilot:** FLIGHT (instruments, AOA indexer, fuel readouts, master caution) · ARMAMENT (master arm, ACM cover / jettison,
+  gun rate, Sidewinder cool, missile prep / mode, HUD modes) · ENGINE · FUEL (crank, throttle mode / temp, generators, fire
+  bottles, fuel panel with the fuel counters and BINGO, hydraulics) · GEAR · SYSTEMS (gear, hook, launch bar, nose strut,
+  anti-skid, flaps, AFCS / autopilot, lights, canopy) · CAUTION (all 49 caution / advisory lamps) · RADIO · NAV (ARC-159 UHF
+  with its frequency display, TACAN with range / course, steering and HSD / VDI modes).
+- **RIO:** CAP · TID (computer address panel with category, the 10 function keys and the keypad, plus the TID controls) ·
+  RADAR (modes, ranges, elevation bars / azimuth, DDD and hand-control-unit switches) · DEFENSIVE (AN/ALE-37 with the chaff /
+  flare / jammer counters, RWR, DECM) · ARMAMENT (weapon wheel, fuzing, missile options, selective jettison) · RADIO · NAV
+  (ARC-182 V/UHF with its display, TACAN).
+- Guarded switches show a red-striped cover: tap it to lift the cover, then flip the switch.
+- The TID and DDD **pictures** can't be shown: Heatblur's F-14 (and F-4E) don't support DCS's display export, so there is
+  nothing to stream. All their controls work.
+
 Generic dashboards (Military jet / helicopter): flight instruments come from `SimDash.lua` for any aircraft.
 Their switches are connected to DCS-BIOS for the **F-14, F-4E and AH-64D** in `bridge/dcs.json`; you can add more aircraft
 there. If a gauge moves the wrong way in DCS (e.g. the attitude indicator banks backwards), set `flip` in `dcs.json`.
+
+## 3b. Live screens: FLIR, radar and MFD pictures on the iPad
+DCS can draw an aircraft's displays in extra places on your PC screen ("exported displays"). The bridge copies those
+places off the screen and streams them to the iPad several times a second.
+1. Double-click **`setup-screens.bat`** once. It writes a DCS monitor layout (`Saved Games\DCS\Config\MonitorSetup\SimDash.lua`)
+   and `bridge/data/screens.json`:
+   - with a second monitor to the right of the main one, the displays go there;
+   - otherwise they go in a strip on the right of the main screen (the 3D view gets a bit narrower).
+   - `--strip` forces the strip, `--size 600` sets the display size, `--remove` deletes the layout again.
+2. In DCS: **Options › System**: Monitors = **SimDash (iPad live screens)**, Resolution = the size the script prints, and
+   **Full Screen off** (exclusive full screen captures as black). Restart DCS.
+3. Start the bridge. The Apache MPD page and TADS · TEDAC page go live on their own.
+
+Which aircraft can export displays: most Eagle Dynamics modules use `LEFT_MFCD` / `RIGHT_MFCD` / `CENTER_MFCD`: the AH-64D
+(both MPDs, and the TEDAC in the centre slot), F/A-18C, F-16C, A-10C and others. Heatblur's F-14 and F-4E don't support it.
+
+- **My panels** has a **Live screen** widget, so you can put any screen on your own pages at any size.
+- Any window or area of the PC screen can be added to `bridge/data/screens.json` by hand, e.g. an MSFS pop-out PFD / MFD:
+  `"PFD": {"label": "MSFS PFD", "window": "PFD"}` (a part of a window title) or `{"x": 1920, "y": 0, "w": 600, "h": 600}`
+  (desktop pixels).
+- Pictures are PNG. **`pip install pillow`** switches them to JPEG, which is about 10x smaller and smoother over Wi-Fi.
+  `"fps"` (default 8) and `"quality"` (default 70) in screens.json tune speed against Wi-Fi load.
+- Demo mode shows a fake FLIR picture on the TADS page so you can see how it looks.
 
 ## 4. Panel lighting (night mode)
 The **☀** button cycles **Day → Night (red backlight) → NVG (green)** on every panel. **⚙ › Brightness** dims further.
@@ -156,11 +205,14 @@ the clicks are muted too.
 start-bridge.bat          MSFS + DCS (direct)
 start-demo.bat            fake data, try the iPad side
 install-dcs.bat           installs SimDash.lua into DCS (--uninstall to remove)
+setup-screens.bat         DCS display export for live screens (FLIR, radar, MFDs)
 start-bridge-simhub.bat   optional SimHub mode
 bridge/bridge.py          HTTP + WebSocket server, routes data and touches
 bridge/src_msfs.py        SimConnect (ctypes, no pip packages)      + msfs.json
 bridge/src_dcs.py         SimDash.lua + DCS-BIOS client              + dcs.json
 bridge/src_simhub.py      SimHub Property Server client (optional)  + properties.json
+bridge/src_screens.py     live screens: copies exported displays off the PC screen
+bridge/setup_screens.py   writes the DCS monitor layout + bridge/data/screens.json
 dcs/SimDash.lua           DCS export script
 web/                      the iPad web app
 ```

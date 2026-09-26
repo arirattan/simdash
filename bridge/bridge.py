@@ -10,6 +10,7 @@ SimDash bridge
 * Pushes sim values to the iPad as canonical keys (ias, alt, pitch, ...) plus,
   for DCS, every DCS-BIOS cockpit control.
 * Turns touches on the iPad into sim commands (SimConnect events / DCS-BIOS commands).
+* Streams exported cockpit displays (Apache MPDs, TADS FLIR, MFDs...) as live screens (src_screens.py).
 
 Pure Python standard library - no pip install needed.
 
@@ -29,6 +30,7 @@ import socket
 import struct
 import time
 from pathlib import Path
+from urllib.parse import unquote
 
 HERE = Path(__file__).resolve().parent
 WEB_ROOT = (HERE.parent / "web").resolve()
@@ -110,7 +112,9 @@ class Bridge:
         self.dcs = None
         self.msfs = None
         from src_api import Api
+        from src_screens import Screens
         self.api = Api(log)
+        self.screens = Screens(log, demo=args.demo)
 
     # ---------- called by sources ----------
     def push(self, values, src=None):
@@ -283,6 +287,16 @@ class Bridge:
                 res = {"error": "layout too large or empty"}
             await self.respond(writer, method, "200 OK", "application/json", json.dumps(res).encode())
             return
+        if path.startswith("/screen/"):  # live picture of an exported display (src_screens.py)
+            try:
+                ctype, body = await self.screens.frame(unquote(path[len("/screen/"):]))
+                await self.respond(writer, method, "200 OK", ctype, body)
+            except (LookupError, OSError, ValueError) as e:
+                await self.respond(writer, method, "503 Service Unavailable", "text/plain; charset=utf-8", str(e).encode())
+            return
+        if path == "/api/screens":
+            await self.respond(writer, method, "200 OK", "application/json", json.dumps(self.screens.info()).encode())
+            return
         if path.startswith("/api/"):
             res = await self.api.handle(path, query)
             await self.respond(writer, method, "200 OK", "application/json", json.dumps(res, separators=(",", ":")).encode())
@@ -333,6 +347,13 @@ class Bridge:
                         "PLT_KU_DISPLAY": "WPT FLY-TO A01", "CPG_KU_DISPLAY": "TGT T01",
                         "PLT_CMWS_FLARE_COUNT": "30", "PLT_CMWS_CHAFF_COUNT": "00", "CPG_CMWS_FLARE_COUNT": "30",
                         "PLT_MASTER_ARM_SAFE_L": 1, "PLT_CMWS_FWD_LEFT_BRT_L": 1, "PLT_MASTER_CAUTION_L": 1})
+        # sample F-14 displays for the Tomcat page
+        self.push_bios({"PLT_UHF_DISP": "305.000", "RIO_UHF_REMOTE_DISP": "305.000", "RIO_VUHF_DISP": "127.500",
+                        "PLT_VUHF_REMOTE_DISP": "127.500", "PLT_FUEL_LEFT_DISP": 2100, "PLT_FUEL_RIGHT_DISP": 2000,
+                        "PLT_FUEL_TOTAL_DISP": 14200, "PLT_FUEL_BINGO_DISP": 4000, "PLT_AMMO_DISP": 675, "PLT_HUD_MODE": "CRUISE",
+                        "PLT_STEER_MODE": "TACAN", "HSD_TACAN_RANGE_S": "23.4", "HSD_TACAN_CRS_S": "090",
+                        "RIO_CMDS_CHAFFCNT_DISPLAY": 60, "RIO_CMDS_FLARECNT_DISPLAY": 30, "RIO_CMDS_JAMMCNT_DISPLAY": 0,
+                        "PLT_WARN_BINGO": 0, "PLT_WARN_AUTOPLT": 1, "PLT_HOOK_LIGHT": 0, "PLT_MASTER_ARM_SW": 1})
 
     def demo_input(self, name, action):
         if action == "release":
@@ -415,6 +436,13 @@ class Bridge:
             "tank_pct": round(d["tank"], 1), "tank_gal": round(d["tank"] * 8), "drop_door": d["door"], "drop_flow": 9000 if d["door"] else 0,
             "scoop": d["scoop"], "vel_x": round(2 * S(t / 5), 2), "vel_z": round(3 * S(t / 7), 2),
         })
+        # F-14 AOA indexer and master caution follow the demo flight (only sent when they change)
+        aoa = 8 + 5 * S(t / 6)
+        lamps = {"PLT_AOA_SLOW": int(aoa > 10), "PLT_AOA_OPT": int(8 <= aoa <= 11), "PLT_AOA_FAST": int(aoa < 9),
+                 "PLT_MASTER_CAUTION": 1 if int(t) % 20 < 3 else 0}
+        changed = {k: v for k, v in lamps.items() if self.bios.get(k) != v}
+        if changed:
+            self.push_bios(changed)
 
 
 def demo_panel():

@@ -1,7 +1,8 @@
 /*
  * AH-64D Apache (DCS) dashboard, driven by DCS-BIOS.
  *
- * Pages:  MPD (both MPD bezels) · EUFD + KU (up-front display text + keyboard unit)
+ * Pages:  MPD (both MPD bezels, live MPD pictures with setup-screens.bat) · TADS · TEDAC (CPG sight: live FLIR / TV picture + handgrips)
+ *         EUFD + KU (up-front display text + keyboard unit)
  *         PANELS (armament, jettison, fire, engine start, CMWS, emergency, lights) · FLIGHT (standby instruments)
  * Seat:   PLT / CPG - every identifier is the DCS-BIOS name with the seat prefix (PLT_MPD_L_T1 -> CPG_MPD_L_T1).
  *         Controls the current seat doesn't have (checked against the bridge's DCS-BIOS list) are hidden.
@@ -17,7 +18,7 @@
   const { el } = G;
 
   let root = null, tabsEl = null, live = [], page = 'MPD', seat = 'PLT', known = null, acft = '';
-  const PAGES = ['MPD', 'EUFD · KU', 'PANELS', 'FLIGHT'];
+  const PAGES = ['MPD', 'TADS · TEDAC', 'EUFD · KU', 'PANELS', 'FLIGHT'];
   const store = {
     get(k, d) { try { return localStorage.getItem('simdash.ah64.' + k) || d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('simdash.ah64.' + k, v); } catch (e) { /* ignore */ } }
@@ -33,123 +34,12 @@
     L.register(w);
     return w;
   }
-  function watch(node, idents, fn) {
-    reg({ el: node, keys: idents.map((i) => 'bios:' + i), update: fn });
-    return node;
-  }
+  // shared DCS-BIOS touch building blocks (bioskit.js)
+  const { watch, push, guarded, seg, rocker, pot, lamp, text, group, guardedSwitch, dpad } = global.BiosKit({ reg, has, val, cmd });
 
-  // ------------------------------------------------------------------ building blocks
-  // momentary button; lamp: identifier (or list) that lights it
-  function push(ident, label, opts = {}) {
-    if (!has(ident)) return el('span', { class: 'ah-gap' });
-    const b = el('button', { class: 'ah-btn ' + (opts.cls || ''), type: 'button' });
-    if (opts.lamp !== false) el('span', { class: 'ah-led ' + (opts.color || '') }, b);
-    el('span', { class: 'ah-btn-t', text: label }, b);
-    let down = false;
-    b.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      try { b.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-      down = true;
-      b.classList.add('pressed');
-      cmd(ident, opts.press !== undefined ? opts.press : 1);
-    });
-    const up = () => {
-      if (!down) return;
-      down = false;
-      b.classList.remove('pressed');
-      cmd(ident, opts.release !== undefined ? opts.release : 0);
-    };
-    b.addEventListener('pointerup', up);
-    b.addEventListener('pointercancel', up);
-    const lamps = [].concat(opts.lamp || []).filter(Boolean);
-    if (lamps.length) watch(b, lamps, () => b.classList.toggle('lit', lamps.some((l) => val(l) > 0)));
-    return b;
-  }
-
-  // guarded button: first tap opens the cover (sim), second tap presses
-  function guarded(btnIdent, coverIdent, label, opts = {}) {
-    if (!has(btnIdent)) return el('span', { class: 'ah-gap' });
-    const w = el('div', { class: 'ah-guarded' });
-    const b = push(btnIdent, label, opts);
-    w.appendChild(b);
-    if (has(coverIdent)) {
-      const cover = el('div', { class: 'ah-cover', html: label + '<small>lift cover</small>' }, w);
-      cover.addEventListener('pointerdown', (e) => { e.preventDefault(); cmd(coverIdent, 1); });
-      const close = el('button', { class: 'ah-cover-close', type: 'button', text: '✕ close cover' }, w);
-      close.addEventListener('pointerdown', (e) => { e.preventDefault(); cmd(coverIdent, 0); });
-      watch(w, [coverIdent], () => w.classList.toggle('open', val(coverIdent) > 0));
-    } else {
-      w.classList.add('open');
-    }
-    return w;
-  }
-
-  // multi-position switch shown as segments (positions in DCS-BIOS order 0..n)
-  function seg(ident, positions, label) {
-    if (!has(ident)) return el('span', { class: 'ah-gap' });
-    const w = el('div', { class: 'ah-seg' + (positions.length >= 3 ? ' wide' : '') });
-    if (label) el('div', { class: 'ah-lbl', text: label }, w);
-    const row = el('div', { class: 'ah-seg-row' }, w);
-    const btns = positions.map((p, i) => {
-      const b = el('button', { class: 'ah-pos', type: 'button', text: p }, row);
-      b.addEventListener('pointerdown', (e) => { e.preventDefault(); cmd(ident, i); });
-      return b;
-    });
-    watch(w, [ident], () => btns.forEach((b, i) => b.classList.toggle('on', val(ident) === i)));
-    return w;
-  }
-
-  // spring-loaded rocker: hold up (2) / hold down (0), releases to centre (1)
-  function rocker(ident, label, up = '▲', down = '▼') {
-    if (!has(ident)) return el('span', { class: 'ah-gap' });
-    const w = el('div', { class: 'ah-rocker' });
-    const mk = (text, v) => {
-      const b = el('button', { class: 'ah-btn small', type: 'button', text }, w);
-      b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.classList.add('pressed'); cmd(ident, v); });
-      const rel = () => { if (!b.classList.contains('pressed')) return; b.classList.remove('pressed'); cmd(ident, 1); };
-      b.addEventListener('pointerup', rel);
-      b.addEventListener('pointercancel', rel);
-      b.addEventListener('pointerleave', rel);
-    };
-    mk(up, 2);
-    el('div', { class: 'ah-lbl', text: label }, w);
-    mk(down, 0);
-    return w;
-  }
-
-  // potentiometer: −/+ steps
-  function pot(ident, label) {
-    if (!has(ident)) return el('span', { class: 'ah-gap' });
-    const w = el('div', { class: 'ah-pot wide' });
-    el('div', { class: 'ah-lbl', text: label }, w);
-    const row = el('div', { class: 'ah-seg-row' }, w);
-    const m = el('button', { class: 'ah-pos', type: 'button', text: '−' }, row);
-    const v = el('span', { class: 'ah-pot-v' }, row);
-    const p = el('button', { class: 'ah-pos', type: 'button', text: '+' }, row);
-    m.addEventListener('pointerdown', (e) => { e.preventDefault(); cmd(ident, '-6553'); });
-    p.addEventListener('pointerdown', (e) => { e.preventDefault(); cmd(ident, '+6553'); });
-    watch(w, [ident], () => { const x = val(ident); v.textContent = x === undefined ? '--' : Math.round(x / 655.35) + '%'; });
-    return w;
-  }
-
-  function lamp(ident, label, color = 'green') {
-    if (!has(ident)) return el('span', { class: 'ah-gap' });
-    const l = el('div', { class: 'lamp ah-lamp ' + color, text: label });
-    return watch(l, [ident], () => l.classList.toggle('on', val(ident) > 0));
-  }
-
-  function text(ident, cls) {
-    const d = el('div', { class: cls });
-    if (!has(ident)) return d;
-    return watch(d, [ident], () => { const x = val(ident); d.textContent = x === undefined || x === '' ? ' ' : x; });
-  }
-
-  function group(title, children, cls = '') {
-    const g = el('div', { class: 'ah-group ' + cls });
-    if (title) el('div', { class: 'ah-group-t', text: title }, g);
-    const body = el('div', { class: 'ah-group-b' }, g);
-    children.forEach((c) => c && body.appendChild(c));
-    return g;
+  // live picture of an exported DCS display over `scr` (setup-screens.bat); invisible until pictures arrive
+  function liveScreen(scr, names, quiet = true) {
+    scr.appendChild(reg(global.Screens.View(names, { quiet, cls: 'ah-live' })).el);
   }
 
   // ------------------------------------------------------------------ MPD page
@@ -204,8 +94,52 @@
 
   function mpdPage(c) {
     const p = el('div', { class: 'ah-page ah-mpds' }, c);
-    p.appendChild(mpd('L', flightInfo));
-    p.appendChild(mpd('R', eufdMini));
+    // with live screens set up, the real MPD pictures (TSD, FCR radar, video / FLIR...) cover the stand-in content
+    p.appendChild(mpd('L', (scr) => { flightInfo(scr); liveScreen(scr, ['LEFT_MFCD']); }));
+    p.appendChild(mpd('R', (scr) => { eufdMini(scr); liveScreen(scr, ['RIGHT_MFCD']); }));
+  }
+
+  // ------------------------------------------------------------------ TADS · TEDAC page (CPG sight: FLIR / TV / DVO picture)
+  // spring-loaded switches with positions [first, Off, last]: rocker(ident, label, last, first)
+  function tadsPage(c) {
+    const p = el('div', { class: 'ah-page ah-tads' }, c);
+    const t = el('div', { class: 'ah-tedac' }, p);
+    const top = el('div', { class: 'ah-tedac-top' }, t);
+    top.appendChild(seg('CPG_TEDAC_DISP_MODE', ['OFF', 'NT', 'DAY'], 'MODE'));
+    top.appendChild(rocker('CPG_TEDAC_SYM', 'SYM', '+', '−'));
+    top.appendChild(rocker('CPG_TEDAC_BRT', 'BRT', '+', '−'));
+    top.appendChild(rocker('CPG_TEDAC_CON', 'CON', '+', '−'));
+    const left = el('div', { class: 'ah-tedac-side' }, t);
+    [['TAD_SEL', 'TAD'], ['FCR_SEL', 'FCR'], ['PNV_SEL', 'PNV'], ['GS_SEL', 'G/S']]
+      .forEach(([k, l]) => left.appendChild(push('CPG_TEDAC_' + k, l, { lamp: false })));
+    const scr = el('div', { class: 'ah-tedac-screen' }, t);
+    el('div', { class: 'ah-tedac-name', text: 'TEDAC' }, scr);
+    liveScreen(scr, ['TEDAC', 'CENTER_MFCD'], false);
+    const right = el('div', { class: 'ah-tedac-side' }, t);
+    right.appendChild(pot('CPG_TEDAC_FLIR_GAIN', 'FLIR GAIN'));
+    right.appendChild(pot('CPG_TEDAC_FLIR_LEV', 'FLIR LEV'));
+    right.appendChild(rocker('CPG_TEDAC_RF', 'R/F', '+', '−'));
+    right.appendChild(rocker('CPG_TEDAC_EL', 'EL', '▲', '▼'));
+    right.appendChild(rocker('CPG_TEDAC_AZ', 'AZ', '▶', '◀'));
+    const bot = el('div', { class: 'ah-tedac-bot' }, t);
+    [['MULTI', '*'], ['BORESIGHT', 'BORESIGHT'], ['ACM', 'ACM'], ['FREEZE', 'FREEZE'], ['FILTER', 'FILTER']]
+      .forEach(([k, l]) => bot.appendChild(push('CPG_TEDAC_' + k, l, { lamp: false })));
+
+    // handgrip switches, grouped by job
+    const g = el('div', { class: 'ah-panels ah-tads-grips' }, p);
+    [
+      ['SENSOR', [seg('CPG_LHG_TADS_SEL', ['DVO', 'TV', 'FLIR'], 'TADS SENSOR'), rocker('CPG_LHG_TADS_FOV_UP_DN', 'FOV', 'Z', 'M'),
+        rocker('CPG_LHG_TADS_FOV_L_R', 'FOV', 'W', 'N'), push('CPG_RHG_FLIR_POL', 'FLIR POL', { lamp: false }), push('CPG_RHG_DISP_ZOOM', 'ZOOM', { lamp: false })]],
+      ['TRACK · LASER', [rocker('CPG_LHG_TEDAC_L_IAT', 'IAT / OFS', 'IAT', 'OFS'), push('CPG_LHG_LMC', 'LMC', { lamp: false }),
+        seg('CPG_RHG_LASER_TRACK', ['M', 'O', 'A'], 'LST'), rocker('CPG_LHG_STORE_UPDATE', 'STORE / UPDT', 'STO', 'UPD'),
+        push('CPG_RHG_SIGHT_SLAVE', 'SLAVE', { lamp: false }), dpad('CPG_RHG_MAN_TRK_UP_DN', 'CPG_RHG_MAN_TRK_L_R', 'MAN TRACK')]],
+      ['SIGHT · WEAPONS', [rocker('CPG_RHG_SIGHT_L_R', 'SIGHT', 'TADS', 'FCR'), rocker('CPG_RHG_SIGHT_UP_DN', 'SIGHT', 'HMD', 'LINK'),
+        push('CPG_RHG_HDD_SW', 'HDD / HOD', { lamp: false }), rocker('CPG_LHG_WPN_UP_DN', 'WPN ACTION', 'GUN', 'ATA'),
+        rocker('CPG_LHG_WPN_L_R', 'WPN ACTION', 'MSL', 'RKT')]],
+      ['FCR · CURSOR', [rocker('CPG_LHG_FCR_UP_DN', 'FCR MODE', 'GTM', 'ATM'), rocker('CPG_LHG_FCR_L_R', 'FCR MODE', 'RMAP', 'TPM'),
+        rocker('CPG_LHG_FCR_SCAN', 'FCR SCAN', 'S', 'C'), push('CPG_LHG_CUED_SEARCH', 'CUED', { lamp: false }), push('CPG_RHG_C_SCOPE', 'C-SCOPE', { lamp: false }),
+        dpad('CPG_LHG_CURSOR_UP_DN', 'CPG_LHG_CURSOR_L_R', 'CURSOR', 'CPG_LHG_CURSOR_ENT'), push('CPG_LHG_LR_BTN', 'L / R', { lamp: false })]],
+    ].forEach(([title, kids]) => g.appendChild(group(title, kids.filter((k) => !k.classList.contains('ah-gap')))));
   }
 
   // ------------------------------------------------------------------ EUFD + KU page
@@ -313,21 +247,6 @@
     return w;
   }
 
-  // covered 2-position switch (flare jettison)
-  function guardedSwitch(ident, coverIdent, label) {
-    if (!has(ident)) return el('span', { class: 'ah-gap' });
-    const w = el('div', { class: 'ah-guarded' });
-    w.appendChild(seg(ident, ['OFF', 'JETT'], label));
-    if (has(coverIdent)) {
-      const cover = el('div', { class: 'ah-cover', html: label + '<small>lift cover</small>' }, w);
-      cover.addEventListener('pointerdown', (e) => { e.preventDefault(); cmd(coverIdent, 1); });
-      const close = el('button', { class: 'ah-cover-close', type: 'button', text: '✕ close cover' }, w);
-      close.addEventListener('pointerdown', (e) => { e.preventDefault(); cmd(coverIdent, 0); });
-      watch(w, [coverIdent], () => w.classList.toggle('open', val(coverIdent) > 0));
-    }
-    return w;
-  }
-
   // CMWS display: F / C counts and the four threat sectors + R / D lights
   function cmwsDisplay() {
     const w = el('div', { class: 'ah-cmws' });
@@ -385,7 +304,7 @@
       : !/AH-64/i.test(acft) ? `Current DCS-BIOS aircraft is ${acft}, not the AH-64D.` : '';
     if (warn && !L.status.demo) el('div', { class: 'ah-banner', text: warn }, root);
     const body = el('div', { class: 'ah-body' }, root);
-    ({ 'MPD': mpdPage, 'EUFD · KU': eufdKuPage, 'PANELS': panelsPage, 'FLIGHT': flightPage })[page](body);
+    ({ 'MPD': mpdPage, 'TADS · TEDAC': tadsPage, 'EUFD · KU': eufdKuPage, 'PANELS': panelsPage, 'FLIGHT': flightPage })[page](body);
     if (tabsEl) {
       [...tabsEl.querySelectorAll('.tab.pg')].forEach((t) => t.classList.toggle('active', t.textContent === page));
       const s = tabsEl.querySelector('.tab.seat');
@@ -436,7 +355,7 @@
   }
 
   global.DASHBOARDS.apache = {
-    name: 'AH-64D Apache', icon: '🚁', sub: 'MPDs · EUFD · keyboard · fire / arm / CMWS panels  (DCS-BIOS)',
+    name: 'AH-64D Apache', icon: '🚁', sub: 'live MPDs · TADS FLIR · EUFD · keyboard · fire / arm / CMWS panels  (DCS-BIOS)',
     custom: { mount, unmount }
   };
 })(window);
