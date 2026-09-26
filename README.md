@@ -46,6 +46,7 @@ The bridge connects **directly to the sims**, so SimHub isn't needed:
   - What a button, switch or knob sends can be picked from lists:
     - `K:EVENT` or `K:EVENT=value`: MSFS sim event
     - `@INPUT_EVENT`: MSFS cockpit input event
+    - `H:EVENT`: MSFS H: event, e.g. the G1000 keys `H:AS1000_PFD_SOFTKEYS_1` (needs the MobiFlight WASM module)
     - `bios:ID [ARG]`: cockpit control; without ARG it acts as a push button
     - a named input from `msfs.json` / `dcs.json`
   - **TEST** fires an action right from the editor.
@@ -92,10 +93,15 @@ Mapping: `bridge/msfs.json` (SimVar per gauge, sim event per button). Restart th
 
 **G1000 dashboard (MSFS):** a PFD and MFD bezel for G1000 aircraft (C172 G1000, 208B Grand Caravan, DA40…).
 It has softkeys 1–12, D→ / MENU / FPL / PROC / CLR / ENT, dual FMS / NAV / COM / ALT / BARO-CRS knobs, HDG (push = sync),
-RANGE (push = pan) and the GFC 700 autopilot keys. The keys fire the same sim events that MSFS's own G1000 cockpit
-template binds to each bezel control (e.g. `G1000_PFD_SOFTKEY3`, `G1000_MFD_ENTER_BUTTON`,
-`G1000_PFD_GROUP_KNOB_INC`), so no add-ons are needed. Drag a knob's outer ring or inner knob, tap its centre to push,
-or use ⟲ − + ⟳. FMS knob push has no sim event, so it presses the aircraft's input event instead (best effort).
+RANGE (push = pan) and the GFC 700 autopilot keys. Drag a knob's outer ring or inner knob, tap its centre to push,
+or use ⟲ − + ⟳.
+
+*The Garmin keys* (softkeys, FMS knob, D→ / MENU / FPL / PROC / CLR / ENT, RANGE) need the free **MobiFlight WASM
+module** in the MSFS Community folder: double-click **`install-mobiflight-module.bat`** once, then restart MSFS.
+The G1000 NXi (MSFS 2020 and 2024) only reacts to "H:" events such as `AS1000_PFD_SOFTKEYS_3`, which SimConnect
+can't send by itself; the module turns SimDash's `MobiFlight.AS1000_PFD_SOFTKEYS_3` into that H: event. The bridge
+window says whether it found the module, and the G1000 page shows a reminder while it's missing. If you already use
+MobiFlight Connector, its module is the same one. Radios, HDG, ALT, BARO / CRS and the autopilot keys work without it.
 
 *The real G1000 screen and softkey labels:* the softkeys only mean something with the Garmin screen above them, so the
 bridge streams the sim's own PFD / MFD into the bezel (Windows):
@@ -115,6 +121,14 @@ window exists yet: in the 3D cockpit, hold **Right-Alt** (the Alt key right of t
 screen itself. A separate window with only the PFD appears; it can open small or behind the sim, so look for it.
 Very large pop-outs are scaled down for Wi-Fi. If Windows Graphics Capture can't capture a window, the bridge window
 says so and falls back to copying it off the screen.
+
+*Speed:* pictures stream to the iPad over their own connection, up to 15 a second with JPEG (the frame rate shows
+next to ● LIVE). Every couple of minutes the bridge window says what holds it back, e.g.
+`Screens: G1000_PFD 14.6 pictures/s (15 wanted), 96 KB JPEG, 7 ms to capture; the sim redraws the pop-out(s) 12 times/s`.
+- **"PNG", hundreds of KB:** run `install-screen-capture.bat` (or `pip install pillow`) for JPEG, about 10x smaller.
+- **The sim redraws the pop-out only a few times a second:** raise the glass cockpit refresh rate in the MSFS graphics
+  options, and leave the pop-out behind the sim window rather than minimised.
+- Want more? Set `"fps": 20` (up to 30) in `bridge/data/screens.json`.
 
 The bridge finds the pop-outs by itself and counts them left to right: the 1st is the PFD, the 2nd the MFD. To pick
 them yourself (e.g. only the MFD popped out), set `G1000_PFD` / `G1000_MFD` in `bridge/data/screens.json`:
@@ -199,7 +213,7 @@ Which aircraft can export displays: most Eagle Dynamics modules use `LEFT_MFCD` 
   `{"window": "PFD"}` (a part of a window title) or `{"x": 1920, "y": 0, "w": 600, "h": 600}` (desktop pixels).
 - Pictures are PNG. **`pip install pillow`** (or `install-screen-capture.bat`) switches them to JPEG, which is about
   10x smaller and smoother over Wi-Fi.
-  `"fps"` (default 8) and `"quality"` (default 70) in screens.json tune speed against Wi-Fi load.
+  `"fps"` (default 15 with JPEG, 8 with PNG) and `"quality"` (default 70) in screens.json tune speed against Wi-Fi load.
 - Demo mode shows a fake FLIR picture on the TADS page so you can see how it looks.
 
 ## 4. Panel lighting (night mode)
@@ -234,12 +248,14 @@ start-demo.bat            fake data, try the iPad side
 install-dcs.bat           installs SimDash.lua into DCS (--uninstall to remove)
 setup-screens.bat         DCS display export for live screens (FLIR, radar, MFDs)
 install-screen-capture.bat  lets MSFS pop-outs stay hidden while the iPad shows them (windows-capture)
+install-mobiflight-module.bat  MobiFlight WASM module into the MSFS Community folder (G1000 keys)
 start-bridge-simhub.bat   optional SimHub mode
 bridge/bridge.py          HTTP + WebSocket server, routes data and touches
 bridge/src_msfs.py        SimConnect (ctypes, no pip packages)      + msfs.json
 bridge/src_dcs.py         SimDash.lua + DCS-BIOS client              + dcs.json
 bridge/src_simhub.py      SimHub Property Server client (optional)  + properties.json
 bridge/src_screens.py     live screens: copies exported displays off the PC screen
+bridge/install_mobiflight.py  puts the MobiFlight WASM module in the Community folder (G1000 keys)
 bridge/setup_screens.py   writes the DCS monitor layout + bridge/data/screens.json
 dcs/SimDash.lua           DCS export script
 web/                      the iPad web app

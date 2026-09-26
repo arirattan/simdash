@@ -11,6 +11,10 @@ Cockpit panel: MSFS 2020 (SU13+) / 2024 "input events" list every clickable cont
 loaded aircraft (switches, buttons, knobs - the same ones you click in the 3D cockpit).
 They are enumerated when the aircraft changes, their values subscribed, and they are shown
 on the iPad "Cockpit" dashboard exactly like DCS-BIOS controls.
+
+H: events ("H:AS1000_PFD_SOFTKEYS_1"): the G1000 NXi keys only react to these, and SimConnect can't
+send them by itself. The MobiFlight WASM module (Community folder, install-mobiflight-module.bat)
+registers an event "MobiFlight.<name>" for each one that runs (>H:<name>), so they're sent as that.
 """
 import asyncio
 import ctypes
@@ -244,6 +248,7 @@ class MsfsSource:
                 app = raw[12:12 + 256].split(b"\0")[0].decode("utf-8", "replace")
                 self.connected = True
                 self.log(f"MSFS: connected to {app}")
+                self.check_mobiflight()
                 self.b.source_changed()
             elif rid == RECV_EXCEPTION:
                 exc, send_id, index = struct.unpack_from("<III", raw, 12)
@@ -356,6 +361,18 @@ class MsfsSource:
         self._track(f"input event '{name}' = {v}")
         return True
 
+    def check_mobiflight(self):
+        """Tell the bridge window and the iPad (key g1000_keys) whether the G1000 keys can work."""
+        from msfs_community import community_dirs, mobiflight_module
+        mod = mobiflight_module()
+        if mod:
+            self.log(f"MSFS: G1000 keys go through the MobiFlight WASM module ({mod})")
+        else:
+            where = ", ".join(str(d) for d in community_dirs()) or "no Community folder found"
+            self.log("MSFS: the G1000 keys (softkeys, FMS knob, ENT, CLR...) need the MobiFlight WASM module, which isn't "
+                     f"in the Community folder ({where}) - run install-mobiflight-module.bat, then restart MSFS")
+        self.b.push({"g1000_keys": 1 if mod else 0})
+
     # ---------------------------------------------------------------- send
     def value_of(self, v):
         """Numbers pass through; "$key", "$key+100", "$key-1000" read the current dashboard value."""
@@ -374,8 +391,15 @@ class MsfsSource:
             if action != "release":
                 await self.bios_input(name[1:], "1")
             return True
+        if name.startswith("H:"):
+            # H: event, e.g. "H:AS1000_PFD_SOFTKEYS_1" (G1000 NXi keys), through the MobiFlight WASM module
+            if not re.match(r"^[A-Za-z0-9_]+$", name[2:]) or not self.connected:
+                return False
+            if action != "release":
+                self.send_event("MobiFlight." + name[2:], [0], name)
+            return True
         if name.startswith("K:"):
-            # direct sim event from a panel: "K:G1000_PFD_SOFTKEY1", "K:THROTTLE_SET=8192", "K:SOME_EVENT=16384,1"
+            # direct sim event from a panel: "K:AP_MASTER", "K:THROTTLE_SET=8192", "K:SOME_EVENT=16384,1"
             m = re.match(r"^([A-Z0-9_]+)(?:=(-?\d+(?:,-?\d+){0,4}))?$", name[2:])
             if not m or not self.connected:
                 return False
@@ -397,6 +421,11 @@ class MsfsSource:
             event, values = spec, [0]
         else:
             event, values = spec[0], [self.value_of(v) for v in spec[1:]] or [0]
+        self.send_event(event, values, name)
+        return True
+
+    def send_event(self, event, values, name):
+        """Fire a sim event (or a client event such as "MobiFlight.X") with up to 5 values."""
         eid = self.events.get(event)
         if eid is None:
             eid = len(self.events) + 1
@@ -411,4 +440,3 @@ class MsfsSource:
             hr = self.dll.SimConnect_TransmitClientEvent(self.h, USER_OBJECT, eid, data[0], GROUP_PRIORITY_HIGHEST, EVENT_FLAG_GROUPID_IS_PRIORITY)
         if hr != 0:
             self.log(f"MSFS: failed to send {event}")
-        return True

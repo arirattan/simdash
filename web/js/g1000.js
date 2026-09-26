@@ -1,13 +1,13 @@
 /*
  * G1000 bezel (PFD / MFD) for MSFS G1000 aircraft: C172 G1000, 208B Grand Caravan, DA40/DA62, ...
  *
- * Every key and knob sends the sim event that MSFS's own AS1000 cockpit template binds to the
- * matching bezel control (fs-base-aircraft-common/ModelBehaviorDefs/Asobo/GlassCockpit/AS1000.xml):
- *   softkeys        K:G1000_<PFD|MFD>_SOFTKEY1..12
- *   D→ MENU FPL...  K:G1000_<PFD|MFD>_DIRECTTO_BUTTON / MENU_BUTTON / FLIGHTPLAN_BUTTON / PROCEDURE_BUTTON / CLEAR_BUTTON / ENTER_BUTTON
- *   FMS knob        K:G1000_<X>_GROUP_KNOB_INC/DEC (small), PAGE_KNOB_INC/DEC (large)
- *   RANGE knob      K:G1000_<X>_ZOOMOUT_BUTTON / ZOOMIN_BUTTON, push CURSOR_BUTTON
- *   radios, HDG, ALT, CRS/BARO, autopilot: standard K: events
+ * The Garmin keys send the H: events the G1000 NXi (MSFS 2020 and 2024) listens to - it ignores the old
+ * K:G1000_* events. The bridge fires them through the MobiFlight WASM module (install-mobiflight-module.bat):
+ *   softkeys        H:AS1000_<PFD|MFD>_SOFTKEYS_1..12
+ *   D→ MENU FPL...  H:AS1000_<X>_DIRECTTO / MENU_Push / FPL_Push / PROC_Push / CLR / ENT_Push
+ *   FMS knob        H:AS1000_<X>_FMS_Upper_INC/DEC (small), FMS_Lower_INC/DEC (large), push FMS_Upper_PUSH
+ *   RANGE knob      H:AS1000_<X>_RANGE_INC / RANGE_DEC, push JOYSTICK_PUSH
+ *   radios, HDG, ALT, CRS/BARO, autopilot: standard K: events (no add-on needed)
  * The screen shows the real Garmin screen when the PFD / MFD is popped out in MSFS (Right-Alt + click it):
  * the bridge streams the pop-out window (bridge/src_screens.py, G1000_PFD / G1000_MFD). The softkeys are as
  * wide as that picture, so each key sits right under its label. Otherwise SimDash's own flight display shows.
@@ -117,7 +117,7 @@
   // ------------------------------------------------------------------ bezel
   function build(container) {
     const U = unit;
-    const K = (name) => 'K:G1000_' + U + '_' + name;
+    const H = (name) => 'H:AS1000_' + U + '_' + name;
     const b = el('div', { class: 'g1k' }, container);
 
     // left side: NAV, HDG, autopilot, ALT
@@ -137,8 +137,15 @@
     // screen: the real G1000 screen (MSFS pop-out) over SimDash's own display, softkeys right under it
     const disp = el('div', { class: 'g1k-display' }, b);
     const brand = el('div', { class: 'g1k-brand' }, disp);
-    el('span', { text: 'GARMIN' }, brand);
+    const garmin = el('span', { text: 'GARMIN' }, brand);
     const status = el('span', { class: 'g1k-status', text: 'SimDash display' }, brand);
+    reg({ el: garmin, keys: ['g1000_keys'], update(s) {  // the bridge found no MobiFlight WASM module
+      const off = s.g1000_keys === 0;
+      garmin.classList.toggle('g1k-warn', off);
+      garmin.textContent = off ? 'KEYS NEED THE MOBIFLIGHT MODULE: install-mobiflight-module.bat' : 'GARMIN';
+    } });
+    let liveOn = false, fps = '', hideHint = '';
+    const setStatus = () => { status.textContent = liveOn ? ['● LIVE', fps, hideHint].filter(Boolean).join(' · ') : 'SimDash display'; };
     const glass = el('div', { class: 'g1k-glass' }, disp);
     const scr = el('div', { class: 'g1k-screen' }, glass);
     (U === 'PFD' ? pfdScreen : mfdScreen)(scr);
@@ -150,13 +157,16 @@
       onstate(on, text, w, h) {
         disp.classList.toggle('live', on);
         disp.style.setProperty('--ar', on && w && h ? String(w / h) : '4 / 3');
-        status.textContent = on ? '● LIVE' : 'SimDash display';
-        if (on) global.Screens.list().then((i) => { if (!i.hidden) status.textContent = '● LIVE · run install-screen-capture.bat to hide the pop-out'; });
+        liveOn = on;
+        if (!on) fps = '';
+        setStatus();
+        if (on) global.Screens.list().then((i) => { hideHint = i.hidden ? '' : 'run install-screen-capture.bat to hide the pop-out'; setStatus(); });
         why.textContent = on ? '' : text.replace(/\n/g, ' · ');
-      }
+      },
+      onfps(f) { fps = Math.round(f) + ' fps'; setStatus(); }
     })).el);
     const sk = el('div', { class: 'g1k-softkeys' }, disp);
-    for (let i = 1; i <= 12; i++) sk.appendChild(key(String(i), K('SOFTKEY' + i), null, 'soft'));
+    for (let i = 1; i <= 12; i++) sk.appendChild(key(String(i), H('SOFTKEYS_' + i), null, 'soft'));
 
     // right side: COM, CRS/BARO, RANGE, keys, FMS
     const right = el('div', { class: 'g1k-side' }, b);
@@ -165,11 +175,11 @@
     comRow.appendChild(dual({ text: 'COM VOL', inner: { inc: 'K:COM1_VOLUME_INC', dec: 'K:COM1_VOLUME_DEC' }, size: 'sm' }));
     right.appendChild(dual({ text: 'COM  MHz / kHz', outer: { inc: 'K:COM_RADIO_WHOLE_INC', dec: 'K:COM_RADIO_WHOLE_DEC' }, inner: { inc: 'K:COM_RADIO_FRACT_INC', dec: 'K:COM_RADIO_FRACT_DEC' } }));
     right.appendChild(dual({ text: 'BARO / CRS', outer: { inc: 'K:KOHLSMAN_INC', dec: 'K:KOHLSMAN_DEC' }, inner: { inc: 'K:VOR1_OBI_INC', dec: 'K:VOR1_OBI_DEC' } }));
-    right.appendChild(dual({ text: 'RANGE', inner: { inc: K('ZOOMOUT_BUTTON'), dec: K('ZOOMIN_BUTTON') }, push: K('CURSOR_BUTTON'), pushLabel: 'PAN', size: 'sm' }));
+    right.appendChild(dual({ text: 'RANGE', inner: { inc: H('RANGE_INC'), dec: H('RANGE_DEC') }, push: H('JOYSTICK_PUSH'), pushLabel: 'PAN', size: 'sm' }));
     const keys = el('div', { class: 'g1k-keys' }, right);
-    [['D→', 'DIRECTTO_BUTTON'], ['MENU', 'MENU_BUTTON'], ['FPL', 'FLIGHTPLAN_BUTTON'], ['PROC', 'PROCEDURE_BUTTON'], ['CLR', 'CLEAR_BUTTON'], ['ENT', 'ENTER_BUTTON']]
-      .forEach(([t, e]) => keys.appendChild(key(t, K(e))));
-    right.appendChild(dual({ text: 'FMS', outer: { inc: K('PAGE_KNOB_INC'), dec: K('PAGE_KNOB_DEC') }, inner: { inc: K('GROUP_KNOB_INC'), dec: K('GROUP_KNOB_DEC') }, push: '@AS1000_' + U + '_1_FMS_Inner_Button', pushLabel: 'CRSR' }));
+    [['D→', 'DIRECTTO'], ['MENU', 'MENU_Push'], ['FPL', 'FPL_Push'], ['PROC', 'PROC_Push'], ['CLR', 'CLR'], ['ENT', 'ENT_Push']]
+      .forEach(([t, e]) => keys.appendChild(key(t, H(e))));
+    right.appendChild(dual({ text: 'FMS', outer: { inc: H('FMS_Lower_INC'), dec: H('FMS_Lower_DEC') }, inner: { inc: H('FMS_Upper_INC'), dec: H('FMS_Upper_DEC') }, push: H('FMS_Upper_PUSH'), pushLabel: 'CRSR' }));
 
     // night lighting tint on the instruments inside the screen
     b.querySelectorAll('.instrument').forEach((i) => i.appendChild(Object.assign(document.createElement('div'), { className: 'night-tint' })));

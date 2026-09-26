@@ -428,6 +428,7 @@ body.mode-night .dknob, body.mode-nvg .dknob { filter: brightness(0.5); }
 }
 .g1k-brand { width: var(--w); display: flex; justify-content: space-between; font-size: 10px; line-height: 12px; letter-spacing: 3px; color: #7d848c; }
 .g1k-status { letter-spacing: 1px; }
+.g1k-warn { color: var(--amber); letter-spacing: 1px; }
 .g1k-display.live .g1k-status { color: var(--green); }
 .g1k-glass {
   position: relative; flex: none; width: var(--w); aspect-ratio: var(--ar); overflow: hidden;

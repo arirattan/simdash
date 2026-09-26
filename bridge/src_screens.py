@@ -12,7 +12,7 @@ Streams parts of the PC screen to the iPad as pictures it refreshes several time
 
 bridge/data/screens.json:
     {
-      "fps": 8,
+      "fps": 15,
       "quality": 70,
       "screens": {
         "LEFT_MFCD": {"label": "Left MFD", "x": 1920, "y": 0, "w": 640, "h": 640},
@@ -23,6 +23,7 @@ bridge/data/screens.json:
   x / y / w / h are desktop pixels. With "window" (a part of the window title) or "popout" (the n-th MSFS
   pop-out window, counted left to right), x / y / w / h are optional and relative to that window's inside
   (so a part of a window can be shown). Entries here replace the built-in G1000_PFD / G1000_MFD.
+  "fps" is pictures per second (default 15 with JPEG, 8 with PNG), "quality" the JPEG quality (default 70).
 
 Windows only (GDI through ctypes, no pip packages). Pictures are PNG; if Pillow is installed
 (pip install pillow) they are JPEG instead, which is about 10x smaller and so smoother on Wi-Fi.
@@ -393,6 +394,7 @@ class WgcSession:
         self.hwnd, self.every, self.box = hwnd, every, None
         self.frame, self.at, self.used, self.closed = None, 0.0, time.monotonic(), False
         self.lock, self.ready, self.control, self.attempt = threading.Lock(), threading.Event(), None, 0
+        self.drawn, self.counted = 0, (time.monotonic(), 0)  # pictures the window got, for the stats
         err = None
         for opts in self.OPTIONS:
             self.attempt += 1
@@ -428,12 +430,19 @@ class WgcSession:
         raise OSError(f"Windows Graphics Capture didn't start ({err})")
 
     def took(self, frame):
+        self.drawn += 1
         now = time.monotonic()
         if self.frame is None or now - self.at >= self.every:
             f = frame.frame_buffer.copy()  # BGRA; the native buffer is reused after this call
             with self.lock:
                 self.frame, self.at = f, now
             self.ready.set()
+
+    def rate(self):
+        """Pictures per second the window got since the last call."""
+        (t, n), now = self.counted, time.monotonic()
+        self.counted = (now, self.drawn)
+        return (self.drawn - n) / max(0.001, now - t)
 
     def latest(self):
         self.used = time.monotonic()
@@ -466,6 +475,7 @@ class Screens:
         self.cache, self.locks = {}, {}
         self.seen = None  # MSFS pop-outs last reported in the bridge window
         self.wgc, self.wgc_lock, self.wgc_failed = {}, threading.Lock(), set()  # hwnd -> WgcSession
+        self.stats, self.stats_every = {}, 10  # name -> [since, pictures, bytes, capture seconds]; first report after 10 s
 
     def demo_only(self):
         return self.demo and not self.config().get("screens")
@@ -500,7 +510,26 @@ class Screens:
         return out
 
     def fps(self):
-        return max(1.0, min(30.0, float(self.config().get("fps", 8))))
+        return max(1.0, min(30.0, float(self.config().get("fps", 15 if Image is not None or cv2 is not None else 8))))
+
+    def count(self, name, ctype, size, took):
+        """Now and then say in the bridge window how fast a screen goes, and what holds it back."""
+        now = time.monotonic()
+        st = self.stats.setdefault(name, [now, 0, 0, 0.0])
+        st[1], st[2], st[3] = st[1] + 1, st[2] + size, st[3] + took
+        if now - st[0] >= self.stats_every and st[1]:
+            n, secs = st[1], now - st[0]
+            line = (f"Screens: {name} {n / secs:.1f} pictures/s ({self.fps():.0f} wanted), {st[2] / n / 1024:.0f} KB "
+                    f"{ctype.split('/')[-1].upper()}, {st[3] / n * 1000:.0f} ms to capture")
+            with self.wgc_lock:
+                rates = [f"{s.rate():.0f}" for s in self.wgc.values()]
+            if rates:
+                line += f"; the sim redraws the pop-out(s) {', '.join(rates)} times/s"
+            if ctype == "image/png":
+                line += " - run install-screen-capture.bat for JPEG (about 10x smaller)"
+            self.log(line)
+            self.stats[name] = [now, 0, 0, 0.0]
+            self.stats_every = 120
 
     def info(self):
         if self.demo_only():
@@ -606,6 +635,8 @@ class Screens:
             c = self.cache.get(name)
             if c and time.monotonic() - c[0] < dt:
                 return c[1], c[2]
+            t0 = time.monotonic()
             ctype, data = await asyncio.to_thread(self.grab, spec)
             self.cache[name] = (time.monotonic(), ctype, data)
+            self.count(name, ctype, len(data), time.monotonic() - t0)
             return ctype, data

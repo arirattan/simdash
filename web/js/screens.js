@@ -6,6 +6,7 @@
  *     names    screen names to try, first one the bridge has wins
  *     quiet    stay invisible (so whatever is underneath shows) until pictures arrive
  *     onstate  (live, message, width, height) when the picture comes or goes, or changes size
+ *     onfps    (pictures per second shown) every 2 s while live
  */
 (function (global) {
   'use strict';
@@ -28,10 +29,12 @@
     const w = el('div', { class: 'scr' + (o.quiet ? ' quiet' : '') + (o.cls ? ' ' + o.cls : '') });
     const img = el('img', { class: 'scr-img', alt: '' }, w);
     const msg = el('div', { class: 'scr-msg' }, w);
-    let timer = null, prev = null, seen = false, stopped = false, fails = 0, state = '';
+    let timer = null, sock = null, prev = null, seen = false, stopped = false, fails = 0, state = '';
+    let type = 'image/jpeg', next = null, busy = false, shown = 0, since = performance.now();
 
-    const later = (ms) => { clearTimeout(timer); timer = setTimeout(tick, ms); };
-    function stop() { stopped = true; clearTimeout(timer); if (prev) URL.revokeObjectURL(prev); prev = null; }
+    const later = (ms) => { clearTimeout(timer); timer = setTimeout(connect, ms); };
+    function close() { if (sock) { const s = sock; sock = null; s.close(); } }
+    function stop() { stopped = true; clearTimeout(timer); clearInterval(watch); close(); if (prev) URL.revokeObjectURL(prev); prev = null; }
     function report(live, text, iw = 0, ih = 0) {
       const s = [live, text, iw, ih].join('|');
       if (s !== state && o.onstate) o.onstate(live, text, iw, ih);
@@ -39,7 +42,8 @@
     }
     function offline(text) { w.classList.remove('live'); msg.textContent = text; report(false, text); }
 
-    async function tick() {
+    // pictures come over their own WebSocket as fast as the bridge captures them
+    async function connect() {
       if (stopped) return;
       if (!w.isConnected) { if (seen) return stop(); return later(300); }  // removed from the page: done
       seen = true;
@@ -50,23 +54,50 @@
         offline(i.error ? `LIVE SCREEN NOT SET UP\n${i.error}` : `LIVE SCREEN NOT SET UP\nno "${names[0]}" screen in bridge/data/screens.json`);
         return later(5000);
       }
-      const t0 = performance.now();
-      try {
-        const r = await fetch(`${base()}/screen/${encodeURIComponent(name)}`, { cache: 'no-store' });
-        if (!r.ok) throw new Error(await r.text());
-        const url = URL.createObjectURL(await r.blob());
-        await new Promise((ok, bad) => { img.onload = ok; img.onerror = () => bad(new Error('bad picture')); img.src = url; });
+      if (stopped || sock) return;
+      const s = sock = new WebSocket(`ws://${new URLSearchParams(location.search).get('host') || location.host}/screen/${encodeURIComponent(name)}`);
+      s.binaryType = 'blob';
+      s.onmessage = (ev) => {
+        if (typeof ev.data !== 'string') { next = ev.data; show(); return; }
+        let m = {};
+        try { m = JSON.parse(ev.data); } catch (e) { /* ignore */ }
+        if (m.type) type = m.type;
+        if (m.error) offline('NO SIGNAL\n' + m.error);
+      };
+      s.onclose = () => {
+        if (sock !== s) return;  // closed on purpose
+        sock = null;
+        if (!stopped) { offline('NO SIGNAL\nbridge not reachable'); later(Math.min(5000, 500 * ++fails)); }
+      };
+    }
+
+    // newest picture only: the ones arriving while the iPad decodes are skipped, so it never lags behind
+    function show() {
+      if (busy || !next) return;
+      const url = URL.createObjectURL(new Blob([next], { type }));
+      next = null;
+      busy = true;
+      img.onload = () => {
+        busy = false;
         if (prev) URL.revokeObjectURL(prev);
         prev = url;
         fails = 0;
         w.classList.add('live');
         report(true, '', img.naturalWidth, img.naturalHeight);
-        later(Math.max(15, 1000 / (i.fps || 8) - (performance.now() - t0)));
-      } catch (e) {
-        offline('NO SIGNAL\n' + e.message);
-        later(Math.min(5000, 400 * ++fails));
-      }
+        shown++;
+        const t = performance.now();
+        if (t - since >= 2000) { if (o.onfps) o.onfps(shown * 1000 / (t - since)); shown = 0; since = t; }
+        show();
+      };
+      img.onerror = () => { busy = false; URL.revokeObjectURL(url); show(); };
+      img.src = url;
     }
+
+    // hidden page or widget removed: stop streaming
+    const watch = setInterval(() => {
+      if (seen && !w.isConnected) return stop();
+      if (document.hidden && sock) { close(); later(1000); }
+    }, 1000);
     later(0);
     return { el: w, keys: [], update() {}, stop };
   }

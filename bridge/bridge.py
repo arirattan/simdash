@@ -71,6 +71,19 @@ class WSClient:
         except (ConnectionError, RuntimeError):
             self.alive = False
 
+    async def send_bytes(self, data):
+        """One binary message (a live screen picture)."""
+        if not self.alive:
+            return
+        n = len(data)
+        hdr = struct.pack("!BB", 0x82, n) if n < 126 else struct.pack("!BBH", 0x82, 126, n) if n < 65536 else struct.pack("!BBQ", 0x82, 127, n)
+        try:
+            self.w.write(hdr)
+            self.w.write(data)
+            await self.w.drain()
+        except (ConnectionError, RuntimeError):
+            self.alive = False
+
     async def recv(self):
         """Returns decoded text message, or None when closed."""
         buf = b""
@@ -202,6 +215,43 @@ class Bridge:
         }
 
     # ---------- clients ----------
+    async def screen_stream(self, ws, name):
+        """A live screen over its own WebSocket: {"type": ...} when the picture format changes, then one binary
+        message per new picture, as fast as the screens fps and the iPad allow. Problems go as {"error": ...}."""
+        closed = asyncio.ensure_future(self.ws_drain(ws))
+        sent_type, last = None, None
+        try:
+            while ws.alive and not closed.done():
+                t0 = time.monotonic()
+                try:
+                    ctype, body = await self.screens.frame(name)
+                except Exception as e:
+                    if not isinstance(e, (LookupError, OSError, ValueError)):
+                        log(f"Screens: capture error: {e!r}")
+                    await ws.send({"error": str(e) or repr(e)})
+                    await asyncio.wait({closed}, timeout=1.0)
+                    continue
+                if ctype != sent_type:
+                    await ws.send({"type": ctype})
+                    sent_type = ctype
+                if body != last:  # nothing new on screen: nothing to send
+                    await ws.send_bytes(body)
+                    last = body
+                pause = 1.0 / self.screens.fps() - (time.monotonic() - t0)
+                if pause > 0:
+                    await asyncio.wait({closed}, timeout=pause)
+        finally:
+            closed.cancel()
+
+    @staticmethod
+    async def ws_drain(ws):
+        """Read (and ignore) what the iPad sends on a screen stream; returns when it closes."""
+        try:
+            while await ws.recv() is not None:
+                pass
+        except (asyncio.IncompleteReadError, ConnectionError, OSError):
+            pass
+
     async def ws_session(self, ws):
         self.clients.add(ws)
         log(f"iPad/browser connected {ws.peer[0]}  ({len(self.clients)} client(s))")
@@ -270,7 +320,11 @@ class Bridge:
             sock = writer.get_extra_info("socket")
             if sock:
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            await self.ws_session(WSClient(reader, writer))
+            path = target.partition("?")[0]
+            if path.startswith("/screen/"):  # live screen pictures, pushed as they come
+                await self.screen_stream(WSClient(reader, writer), unquote(path[len("/screen/"):]))
+            else:
+                await self.ws_session(WSClient(reader, writer))
             writer.close()
             return
 
