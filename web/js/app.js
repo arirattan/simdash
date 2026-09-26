@@ -13,7 +13,7 @@
   Object.entries(D).forEach(([id, d]) => {
     const b = document.createElement('button');
     b.className = 'dash-card';
-    b.innerHTML = `<span class="dash-icon">${d.icon}</span><span class="dash-name">${d.name}</span><span class="dash-pages">${d.pages.map((p) => p.title).join(' · ')}</span>`;
+    b.innerHTML = `<span class="dash-icon">${d.icon}</span><span class="dash-name">${d.name}</span><span class="dash-pages">${d.sub || d.pages.map((p) => p.title).join(' · ')}</span>`;
     b.onclick = () => { location.hash = id; };
     list.appendChild(b);
   });
@@ -24,8 +24,12 @@
     if (w.keys && w.keys.length) window.Link.register(w);
   }
 
-  let current = null;
+  let current = null, custom = null;
   const built = {};
+
+  function leaveCustom() {
+    if (custom) { custom.unmount(); custom = null; }
+  }
 
   function openDash(id, pageIdx) {
     const d = D[id];
@@ -33,7 +37,20 @@
     $('#home').classList.add('hidden');
     $('#dash').classList.remove('hidden');
     $('#dash-title').textContent = d.name;
+    if (d.custom) {
+      if (current === id) return;
+      leaveCustom();
+      current = id;
+      store.set('last', id);
+      $('#pages').innerHTML = '';
+      $('#tabs').innerHTML = '';
+      Object.keys(built).forEach((k) => delete built[k]);
+      custom = d.custom;
+      custom.mount($('#pages'), $('#tabs'));
+      return;
+    }
     if (current !== id) {
+      leaveCustom();
       current = id;
       $('#pages').innerHTML = '';
       Object.keys(built).forEach((k) => delete built[k]);
@@ -77,6 +94,7 @@
   }
 
   function showHome() {
+    leaveCustom();
     current = null;
     $('#dash').classList.add('hidden');
     $('#home').classList.remove('hidden');
@@ -97,7 +115,7 @@
     if (sx === null) return;
     const dx = e.changedTouches[0].clientX - sx;
     sx = null;
-    if (Math.abs(dx) < 80 || !current) return;
+    if (Math.abs(dx) < 80 || !current || !D[current].pages) return;
     const n = D[current].pages.length, cur = +(location.hash.split('/')[1] || 0);
     location.hash = current + '/' + ((cur + (dx < 0 ? 1 : -1) + n) % n);
   });
@@ -107,9 +125,14 @@
     let text, cls;
     if (!s.connected) { text = 'Bridge offline'; cls = 'bad'; }
     else if (s.demo) { text = 'DEMO data'; cls = 'demo'; }
-    else if (!s.simhub) { text = 'SimHub not connected'; cls = 'warn'; }
-    else if (!s.game) { text = 'SimHub ✓ · no sim running'; cls = 'warn'; }
-    else { text = `${s.game} · ${s.profile}`; cls = 'ok'; }
+    else if (s.sim) { text = s.aircraft ? `${s.sim} · ${s.aircraft}` : `${s.sim} connected`; cls = 'ok'; }
+    else {
+      const src = s.sources || {};
+      const names = { msfs: 'MSFS', dcs: 'DCS', simhub: 'SimHub' };
+      const w = Object.keys(src).map((k) => names[k] || k);
+      text = w.length ? `Waiting for ${w.join(' / ')}` : 'No sim connection';
+      cls = 'warn';
+    }
     ['#pill', '#home-pill'].forEach((q) => { const p = $(q); p.textContent = text; p.className = 'pill ' + cls; });
   });
 

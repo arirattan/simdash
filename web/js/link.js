@@ -10,12 +10,17 @@
   const fromSim = new Set();
   const widgets = [];
   const listeners = { status: [], inspect: [] };
-  let ws = null, status = { simhub: false, game: '', profile: '' }, pending = new Set(), raf = 0;
+  let ws = null, status = { sim: '', aircraft: '' }, pending = new Set(), raf = 0;
   let localDemo = params.get('demo') === '1' || location.protocol === 'file:' || /claude|artifact/.test(location.host);
 
   function register(w) {
     widgets.push(w);
     w.update(state);
+  }
+
+  function unregister(w) {
+    const i = widgets.indexOf(w);
+    if (i >= 0) widgets.splice(i, 1);
   }
 
   function apply(delta) {
@@ -42,9 +47,22 @@
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'input', name, a }));
   }
 
+  // DCS-BIOS command, e.g. biosCmd('PLT_GEAR_LEVER', '1')
+  function biosCmd(id, arg) {
+    if (localDemo || status.demo) Demo.bios(id, String(arg));
+    if (!localDemo && ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'bios', id, arg: String(arg) }));
+  }
+
+  // DCS-BIOS values live in the same store under "bios:<IDENTIFIER>"
+  function applyBios(d) {
+    const out = {};
+    for (const k in d) out['bios:' + k] = d[k];
+    apply(out);
+  }
+
   function connect() {
     if (localDemo) {
-      setStatus({ simhub: true, demo: true, game: 'DEMO (browser)', profile: 'demo', connected: true });
+      setStatus({ sim: 'DEMO', demo: true, aircraft: 'browser', connected: true });
       Demo.start();
       return;
     }
@@ -55,11 +73,12 @@
       let m;
       try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.t === 'state') apply(m.d);
+      else if (m.t === 'bios') applyBios(m.d);
       else if (m.t === 'status') setStatus(Object.assign(m, { connected: true }));
       else if (m.t === 'inspect') listeners.inspect.forEach((f) => f(m));
     };
     ws.onclose = () => {
-      setStatus(Object.assign({}, status, { connected: false, simhub: false }));
+      setStatus(Object.assign({}, status, { connected: false, sim: '' }));
       setTimeout(connect, 2000);
     };
   }
@@ -101,6 +120,17 @@
       setInterval(step, 100);
       step();
     },
+    bios(id, arg) {
+      const k = 'bios:' + id, cur = state[k] || 0;
+      let v = cur;
+      if (arg === 'TOGGLE') v = cur ? 0 : 1;
+      else if (arg === 'INC') v = cur + 1;
+      else if (arg === 'DEC') v = Math.max(0, cur - 1);
+      else if (/^[+-]d+$/.test(arg)) v = Math.max(0, Math.min(65535, cur + parseInt(arg, 10)));
+      else if (/^d+$/.test(arg)) v = parseInt(arg, 10);
+      apply({ [k]: v });
+      if (id === 'GEAR_LEVER') apply({ 'bios:GEAR_LIGHT': 1 }), setTimeout(() => apply({ 'bios:GEAR_LIGHT': 0 }), 2500);
+    },
     input(name, a) {
       if (a === 'release') return;
       const d = this.d, n = name.toUpperCase();
@@ -130,7 +160,8 @@
   document.addEventListener('pointerdown', keepAwake, { once: true });
 
   global.Link = {
-    state, register, input, connect, inspect,
+    state, register, unregister, input, biosCmd, connect, inspect,
+    get status() { return status; },
     has: (k) => fromSim.has(k),
     onStatus: (f) => { listeners.status.push(f); f(status); },
     onInspect: (f) => listeners.inspect.push(f),

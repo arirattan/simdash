@@ -335,3 +335,44 @@ body.mode-night .instrument img.bg, body.mode-nvg .instrument img.bg,
 body.mode-night .dial-box, body.mode-nvg .dial-box { filter: brightness(0.3); }
 body.mode-night .instrument, body.mode-nvg .instrument { background: #000; }
 body.mode-night .lever-handle, body.mode-nvg .lever-handle { filter: brightness(0.45); }
+
+/* ======================================================================
+   DCS cockpit (auto-generated from DCS-BIOS)
+   ====================================================================== */
+.bp { position: absolute; inset: 0; display: grid; grid-template-columns: 250px 1fr; min-height: 0; }
+.bp-side { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--edge); background: var(--panel); }
+.bp-head { padding: 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--edge); }
+.bp-acft { font-weight: 700; font-size: 18px; letter-spacing: 1px; }
+.bp-search { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--edge); background: var(--bg); color: var(--text); }
+.bp-cats { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.bp-cat { display: flex; justify-content: space-between; align-items: center; gap: 8px; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 11px 10px; font-size: 14px; cursor: pointer; color: var(--text); }
+.bp-cat small { color: var(--muted); font-size: 11px; }
+.bp-cat.active { background: var(--panel-2); border-color: var(--cyan); }
+.bp-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.bp-title { padding: 12px 16px 6px; font-size: 13px; letter-spacing: 2px; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+.bp-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px 12px 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; align-content: start; }
+.bc { background: linear-gradient(#1d2024, #15171a); border: 1px solid var(--edge); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bc.wide { grid-column: span 2; }
+.bc-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
+.bc-id { font-family: var(--digital-font); font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -4px; }
+.bc-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.bc-pos { flex: 1 1 0; min-width: 56px; min-height: 50px; border-radius: 8px; border: 1px solid #000; background: #262a2f; font-weight: 700; font-size: 13px; cursor: pointer; touch-action: none; padding: 4px; }
+.bc-pos.on { background: #e8e8e8; color: #111; box-shadow: 0 0 10px #fff4; }
+.bc-push { min-height: 60px; }
+.bc-step { display: flex; align-items: center; gap: 8px; }
+.bc-step .step { width: 54px; height: 50px; flex: 0 0 auto; }
+.bc-val { flex: 1; text-align: center; font-family: var(--digital-font); color: var(--green); font-size: 17px; background: #000; border: 1px solid #333; border-radius: 6px; padding: 10px 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.bc-val.small { font-size: 13px; padding: 4px; }
+.bc-range { width: 100%; height: 34px; accent-color: var(--cyan); }
+.bc-lamp { min-height: 52px; font-size: 12px; }
+.bc-display { font-family: var(--digital-font); color: var(--green); background: #000; border: 1px solid #333; border-radius: 6px; padding: 10px; font-size: 20px; white-space: pre; overflow: hidden; }
+.bc-bar { height: 16px; background: #070707; border: 1px solid #333; border-radius: 4px; overflow: hidden; }
+.bc-bar-fill { height: 100%; width: 0; background: linear-gradient(90deg, #cfd6dd, #fff); transition: width var(--ease); }
+.bc-empty { grid-column: 1 / -1; color: var(--muted); padding: 40px 20px; text-align: center; font-size: 16px; line-height: 1.5; }
+body.mode-night .bc, body.mode-nvg .bc { background: var(--panel); }
+body.mode-night .bc-pos, body.mode-nvg .bc-pos { background: var(--panel-2); color: var(--muted); }
+body.mode-night .bc-pos.on, body.mode-nvg .bc-pos.on { background: var(--text); color: #000; box-shadow: none; }
+body.mode-night .bc-val, body.mode-night .bc-display { color: var(--green); }
+body.mode-night .bc-bar-fill { background: var(--text); }
+body.mode-nvg .bc-bar-fill { background: var(--text); }
+@media (max-width: 900px) { .bp { grid-template-columns: 180px 1fr; } }

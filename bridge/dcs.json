@@ -1,0 +1,102 @@
+{
+  "_README": [
+    "DCS direct connection. Restart the bridge after editing this file.",
+    "Flight data comes from SimDash.lua (install-dcs.bat). Cockpit switches/lamps come from DCS-BIOS.",
+    "The 'DCS cockpit' dashboard on the iPad shows EVERY DCS-BIOS control of the current aircraft - no mapping needed.",
+    "The 'aircraft' section below only connects the generic dashboards (Military jet / helicopter) to DCS-BIOS controls.",
+    "  state:  dashboard key -> \"IDENTIFIER\" (raw value) or [\"IDENTIFIER\", {\"raw value\": dashboard value}]",
+    "  inputs: dashboard input name -> \"IDENTIFIER ARGUMENT\" (sent on press)",
+    "          or {\"press\": \"...\", \"release\": \"...\"}  (push buttons)",
+    "          or {\"toggle\": \"IDENTIFIER\", \"on\": n, \"off\": n, \"cover\": \"COVER_IDENTIFIER\"}  (flip between two positions)",
+    "  Identifiers and positions: iPad > DCS cockpit dashboard, or Saved Games\\DCS\\Scripts\\DCS-BIOS\\doc\\json\\<module>.json",
+    "flip: set true if a gauge moves the wrong way (e.g. the attitude indicator banks backwards)."
+  ],
+  "export_port": 7790,
+  "bios": {
+    "multicast_group": "239.255.50.10",
+    "export_port": 5010,
+    "command_host": "127.0.0.1",
+    "command_port": 7778,
+    "doc_dir": null
+  },
+  "flip": { "pitch": false, "roll": false, "turn": false, "slip": false },
+
+  "aircraft": {
+    "F-14": {
+      "match": ["F-14"],
+      "state": {
+        "master_arm": ["PLT_MASTER_ARM_SW", { "0": 1 }],
+        "master_caution": "PLT_MASTER_CAUTION",
+        "hook": "PLT_HOOK_LEVER",
+        "parking_brake": "PLT_PARK_BRAKE",
+        "light_beacon": "PLT_ANTICOL_LIGHT",
+        "light_taxi": "PLT_TAXI_LIGHT",
+        "light_nav": ["PLT_POS_LIGHT_WING", { "0": 1, "2": 1 }],
+        "gen_l": ["PLT_L_GEN_SW", { "2": 1 }],
+        "gen_r": ["PLT_R_GEN_SW", { "2": 1 }]
+      },
+      "inputs": {
+        "GEAR_UP": "PLT_GEAR_LEVER 0",
+        "GEAR_DOWN": "PLT_GEAR_LEVER 1",
+        "GEAR_TOGGLE": "PLT_GEAR_LEVER TOGGLE",
+        "HOOK_TOGGLE": "PLT_HOOK_LEVER TOGGLE",
+        "PARKING_BRAKE": "PLT_PARK_BRAKE TOGGLE",
+        "MASTER_ARM": { "toggle": "PLT_MASTER_ARM_SW", "on": 0, "off": 1, "cover": "PLT_MASTER_ARM_COVER" },
+        "JETTISON": { "press": "PLT_EMERG_STORE_JETT 1", "release": "PLT_EMERG_STORE_JETT 0" },
+        "FLAPS_INC": "PLT_FLAPS_LEVER +32768",
+        "FLAPS_DEC": "PLT_FLAPS_LEVER -32768",
+        "LIGHT_BEACON": "PLT_ANTICOL_LIGHT TOGGLE",
+        "LIGHT_TAXI": "PLT_TAXI_LIGHT TOGGLE",
+        "LIGHT_LANDING": "PLT_TAXI_LIGHT TOGGLE",
+        "LIGHT_NAV": { "toggle": "PLT_POS_LIGHT_WING", "on": 2, "off": 1 },
+        "GENERATOR_L": { "toggle": "PLT_L_GEN_SW", "on": 2, "off": 1 },
+        "GENERATOR_R": { "toggle": "PLT_R_GEN_SW", "on": 2, "off": 1 },
+        "ENGINE_START_L": "PLT_ENGINE_CRANK 2",
+        "ENGINE_START_R": "PLT_ENGINE_CRANK 0",
+        "MASTER_CAUTION_RESET": { "press": "PLT_MASTER_CAUTION_RESET 1", "release": "PLT_MASTER_CAUTION_RESET 0" }
+      }
+    },
+
+    "F-4E": {
+      "match": ["F-4E"],
+      "state": {
+        "master_arm": "PLT_WPN_MASTER_ARM",
+        "master_caution": "PLT_WCA_MASTER_CAUTION",
+        "chaff_lamp": "WSO_CM_CHAFF_LIGHT",
+        "flare_lamp": "PLT_CM_FLARE_LIGHT"
+      },
+      "inputs": {
+        "GEAR_UP": "PLT_GEAR_LEVER TOGGLE",
+        "GEAR_DOWN": "PLT_GEAR_LEVER TOGGLE",
+        "GEAR_TOGGLE": "PLT_GEAR_LEVER TOGGLE",
+        "HOOK_TOGGLE": "PLT_GEAR_ARRESTING_HOOK TOGGLE",
+        "MASTER_ARM": "PLT_WPN_MASTER_ARM TOGGLE",
+        "CM_PROGRAM": { "press": "WSO_CM_DISPENSE 1", "release": "WSO_CM_DISPENSE 0" },
+        "MASTER_CAUTION_RESET": { "press": "PLT_WCA_MASTER_CAUTION_RESET 1", "release": "PLT_WCA_MASTER_CAUTION_RESET 0" }
+      }
+    },
+
+    "AH-64D": {
+      "match": ["AH-64D"],
+      "state": {
+        "master_warning": "PLT_MASTER_WARNING_L",
+        "master_caution": "PLT_MASTER_CAUTION_L",
+        "parking_brake": "PLT_PARK_BRAKE",
+        "rotor_brake": ["PLT_ROTOR_BRK", { "0": 1, "1": 1 }],
+        "apu": "PLT_APU_READY_L",
+        "ir_jammer": "PLT_CMWS_ARM"
+      },
+      "inputs": {
+        "MASTER_ARM": { "press": "PLT_MASTER_ARM_BTN 1", "release": "PLT_MASTER_ARM_BTN 0" },
+        "JETTISON": { "press": "PLT_JETT_BTN 1", "release": "PLT_JETT_BTN 0" },
+        "PARKING_BRAKE": "PLT_PARK_BRAKE TOGGLE",
+        "ROTOR_BRAKE": { "toggle": "PLT_ROTOR_BRK", "on": 1, "off": 2 },
+        "APU": { "press": "PLT_APU_BTN 1", "release": "PLT_APU_BTN 0", "cover": "PLT_APU_BTN_CVR" },
+        "ENGINE_START_L": { "press": "PLT_ENG1_START 2", "release": "PLT_ENG1_START 1" },
+        "ENGINE_START_R": { "press": "PLT_ENG2_START 2", "release": "PLT_ENG2_START 1" },
+        "IR_JAMMER": "PLT_CMWS_ARM TOGGLE",
+        "CANOPY": "PLT_CANOPY TOGGLE"
+      }
+    }
+  }
+}

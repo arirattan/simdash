@@ -2,21 +2,20 @@
 SimDash bridge
 ==============
 
-iPad (Safari)  <--WebSocket/HTTP-->  this bridge  <--TCP 18082-->  SimHub Property Server plugin  <-->  DCS / MSFS 2024
+    iPad (Safari)  <--HTTP + WebSocket-->  bridge  <--SimConnect-->  MSFS 2020 / 2024
+                                                   <--UDP-------->  DCS World (SimDash.lua + DCS-BIOS)
+                                                   <--TCP-------->  SimHub Property Server (optional)
 
-* Serves the dashboard web app (../web) over HTTP so the iPad can open it.
-* Subscribes to SimHub properties listed in properties.json and pushes them to
-  the iPad as canonical keys (ias, alt, pitch, ...), so dashboards never care
-  which sim is running.
-* Receives touch presses from the iPad and forwards them to SimHub as
-  `trigger-input-pressed/released <name>`. In SimHub you map those inputs to
-  keystrokes / vJoy buttons that the sim is bound to.
+* Serves the dashboard web app (../web) so the iPad just opens a URL.
+* Pushes sim values to the iPad as canonical keys (ias, alt, pitch, ...) plus,
+  for DCS, every DCS-BIOS cockpit control.
+* Turns touches on the iPad into sim commands (SimConnect events / DCS-BIOS commands).
 
 Pure Python standard library - no pip install needed.
 
-    python bridge.py                 # normal mode, talks to SimHub
-    python bridge.py --demo          # fake flight data, no SimHub required
-    python bridge.py --port 8787 --simhub 127.0.0.1:18082
+    python bridge.py                    # MSFS + DCS, whichever is running
+    python bridge.py --demo             # fake flight data, no sim needed
+    python bridge.py --source simhub    # old way: through SimHub's Property Server plugin
 """
 
 import argparse
@@ -26,7 +25,6 @@ import hashlib
 import json
 import math
 import mimetypes
-import os
 import socket
 import struct
 import time
@@ -34,7 +32,6 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 WEB_ROOT = (HERE.parent / "web").resolve()
-PROPS_FILE = HERE / "properties.json"
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 mimetypes.add_type("image/svg+xml", ".svg")
@@ -44,113 +41,6 @@ mimetypes.add_type("text/javascript", ".js")
 
 def log(*a):
     print(time.strftime("%H:%M:%S"), *a, flush=True)
-
-
-# --------------------------------------------------------------------------- #
-# Property mapping
-# --------------------------------------------------------------------------- #
-class Mapping:
-    """Loads properties.json and turns raw SimHub values into canonical keys."""
-
-    def __init__(self, path):
-        self.path = path
-        self.mtime = 0
-        self.cfg = {}
-        self.reload()
-
-    def reload(self):
-        self.mtime = os.path.getmtime(self.path)
-        with open(self.path, encoding="utf-8") as f:
-            self.cfg = json.load(f)
-        log(f"Loaded {self.path.name}: profiles = {', '.join(self.profiles())}")
-
-    def changed(self):
-        try:
-            return os.path.getmtime(self.path) != self.mtime
-        except OSError:
-            return False
-
-    def profiles(self):
-        return [k for k in self.cfg if not k.startswith("_")]
-
-    def detect(self, game_name):
-        """Pick a profile from SimHub's DataCorePlugin.CurrentGame value."""
-        g = (game_name or "").lower()
-        for name in self.profiles():
-            for pat in self.cfg[name].get("_match", []):
-                if pat.lower() in g:
-                    return name
-        return self.cfg.get("_default_profile", self.profiles()[0])
-
-    def all_props(self, profile):
-        out = set()
-        for key, spec in self.cfg.get(profile, {}).items():
-            if key.startswith("_"):
-                continue
-            out.update(spec.get("props", []))
-        return out
-
-    def resolve(self, profile, raw):
-        """raw: {propName: value}. Returns {canonicalKey: value} plus which prop won."""
-        result, source = {}, {}
-        for key, spec in self.cfg.get(profile, {}).items():
-            if key.startswith("_"):
-                continue
-            for p in spec.get("props", []):
-                v = raw.get(p)
-                if v is None:
-                    continue
-                v = convert(v, spec)
-                if v is None:
-                    continue
-                result[key] = v
-                source[key] = p
-                break
-        return result, source
-
-
-def convert(v, spec):
-    kind = spec.get("type", "number")
-    if kind == "bool":
-        if isinstance(v, str):
-            return 1 if v.strip().lower() in ("true", "1", "on", "yes") else 0
-        return 1 if v else 0
-    if kind == "string":
-        return str(v)
-    try:
-        x = float(v)
-    except (TypeError, ValueError):
-        return None
-    if spec.get("rad2deg"):
-        x = math.degrees(x)
-    x = x * spec.get("scale", 1.0) + spec.get("offset", 0.0)
-    if "invert" in spec and spec["invert"]:
-        x = -x
-    return round(x, 3)
-
-
-def parse_value(typ, text):
-    if text == "(null)":
-        return None
-    if typ in ("integer", "long"):
-        try:
-            return int(text)
-        except ValueError:
-            return None
-    if typ in ("double", "float", "decimal"):
-        try:
-            return float(text.replace(",", "."))
-        except ValueError:
-            return None
-    if typ == "boolean":
-        return text.lower() == "true"
-    # generic/object/string: try number, else leave as text
-    try:
-        return float(text.replace(",", "."))
-    except ValueError:
-        if text.lower() in ("true", "false"):
-            return text.lower() == "true"
-        return text
 
 
 # --------------------------------------------------------------------------- #
@@ -210,115 +100,77 @@ class WSClient:
 class Bridge:
     def __init__(self, args):
         self.args = args
-        self.mapping = Mapping(PROPS_FILE)
         self.clients = set()
-        self.raw = {}  # SimHub property -> value
-        self.state = {}  # canonical key -> value
-        self.source = {}
-        self.game = ""
-        self.profile = args.profile or self.mapping.detect("")
-        self.simhub_ok = False
-        self.sh_writer = None
-        self.subscribed = set()
+        self.state = {}          # canonical key -> value
+        self.bios = {}           # DCS-BIOS identifier -> value
         self.dirty = set()
+        self.bios_dirty = set()
+        self.status_dirty = True
+        self.sources = []
+        self.dcs = None
 
-    # ---------- SimHub side ----------
-    async def simhub_loop(self):
-        host, port = self.args.simhub.rsplit(":", 1)
-        while True:
-            try:
-                reader, writer = await asyncio.open_connection(host, int(port))
-                banner = await asyncio.wait_for(reader.readline(), 5)
-                log("SimHub connected:", banner.decode().strip())
-                self.sh_writer, self.simhub_ok, self.subscribed = writer, True, set()
-                await self.broadcast_status()
-                await self.sh_send("subscribe DataCorePlugin.CurrentGame")
-                await self.sync_subscriptions()
-                while True:
-                    line = await reader.readline()
-                    if not line:
-                        break
-                    self.on_simhub_line(line.decode("utf-8", "replace").rstrip("\r\n"))
-            except (OSError, asyncio.TimeoutError) as e:
-                if self.simhub_ok or not getattr(self, "_warned", False):
-                    log(f"SimHub Property Server not reachable at {self.args.simhub} ({e.__class__.__name__}). Retrying...")
-                    self._warned = True
-            self.simhub_ok, self.sh_writer = False, None
-            await self.broadcast_status()
-            await asyncio.sleep(3)
+    # ---------- called by sources ----------
+    def push(self, values, src=None):
+        for k, v in values.items():
+            if v is None:
+                continue
+            if isinstance(v, float) and not math.isfinite(v):
+                continue
+            if self.state.get(k) != v:
+                self.state[k] = v
+                self.dirty.add(k)
 
-    async def sh_send(self, line):
-        if self.sh_writer:
-            self.sh_writer.write((line + "\r\n").encode())
-            await self.sh_writer.drain()
+    def push_bios(self, values):
+        self.bios.update(values)
+        self.bios_dirty.update(values)
 
-    async def sync_subscriptions(self):
-        wanted = self.mapping.all_props(self.profile)
-        for p in sorted(wanted - self.subscribed):
-            await self.sh_send(f"subscribe {p}")
-        for p in sorted(self.subscribed - wanted):
-            await self.sh_send(f"unsubscribe {p}")
-            self.raw.pop(p, None)
-        self.subscribed = set(wanted)
+    def source_changed(self):
+        self.status_dirty = True
 
-    def on_simhub_line(self, line):
-        # "Property <name> <type> <value...>"
-        if not line.startswith("Property "):
-            if line.strip():
-                log("SimHub:", line)
-            return
-        parts = line.split(" ", 3)
-        if len(parts) < 4:
-            return
-        _, name, typ, text = parts
-        val = parse_value(typ, text)
-        if name == "DataCorePlugin.CurrentGame":
-            self.game = str(val or "")
-            if not self.args.profile:
-                prof = self.mapping.detect(self.game)
-                if prof != self.profile:
-                    log(f"Game '{self.game}' -> profile '{prof}'")
-                    self.profile = prof
-                    asyncio.get_event_loop().create_task(self.sync_subscriptions())
-            asyncio.get_event_loop().create_task(self.broadcast_status())
-            return
-        self.raw[name] = val
-        self.dirty.add(name)
+    def active(self):
+        for s in self.sources:
+            if s.live:
+                return s
+        return None
 
+    # ---------- inputs from the iPad ----------
     async def trigger(self, name, action):
-        cmd = {"press": "trigger-input-pressed", "release": "trigger-input-released"}.get(action, "trigger-input")
-        if self.args.verbose or not self.simhub_ok:
-            log(f"input {name} {action}" + ("" if self.simhub_ok or self.args.demo else "  (SimHub not connected)"))
+        if self.args.verbose:
+            log(f"input {name} {action}")
         if self.args.demo:
             self.demo_input(name, action)
-        await self.sh_send(f"{cmd} {name}")
+            return
+        # the sim that is actually flying first, then anything that is merely connected
+        for s in sorted(self.sources, key=lambda s: not s.live):
+            if await s.input(name, action):
+                return
+        if action != "release":
+            log(f"input {name}: no connected sim handles it")
 
-    # ---------- publish loop ----------
+    async def bios_input(self, ident, arg):
+        if self.args.verbose:
+            log(f"DCS-BIOS {ident} {arg}")
+        if self.dcs:
+            await self.dcs.bios_input(ident, arg)
+
+    # ---------- publish ----------
     async def publish_loop(self):
-        period = 1.0 / 30
         while True:
-            await asyncio.sleep(period)
-            if self.mapping.changed():
-                try:
-                    self.mapping.reload()
-                    if not self.args.profile:
-                        self.profile = self.mapping.detect(self.game)
-                    await self.sync_subscriptions()
-                    self.dirty = set(self.raw)
-                except Exception as e:  # bad JSON while user is editing
-                    log("properties.json error:", e)
+            await asyncio.sleep(1 / 30)
             if self.args.demo:
                 self.demo_tick()
-            if not self.dirty:
-                continue
-            self.dirty.clear()
-            new, self.source = self.mapping.resolve(self.profile, self.raw) if not self.args.demo else (self.state_demo, {})
-            delta = {k: v for k, v in new.items() if self.state.get(k) != v}
-            self.state.update(new)
-            if delta:
-                await self.broadcast({"t": "state", "d": delta})
+            if self.status_dirty:
+                self.status_dirty = False
+                await self.broadcast(self.status_msg())
+            if self.dirty:
+                d = {k: self.state[k] for k in self.dirty}
+                self.dirty.clear()
+                await self.broadcast({"t": "state", "d": d})
+            if self.bios_dirty:
+                d = {k: self.bios[k] for k in self.bios_dirty if k in self.bios}
+                self.bios_dirty.clear()
+                await self.broadcast({"t": "bios", "d": d})
 
-    # ---------- clients ----------
     async def broadcast(self, msg):
         for c in list(self.clients):
             await c.send(msg)
@@ -326,17 +178,23 @@ class Bridge:
                 self.clients.discard(c)
 
     def status_msg(self):
-        return {"t": "status", "simhub": self.simhub_ok or self.args.demo, "demo": self.args.demo,
-                "game": "DEMO" if self.args.demo else self.game, "profile": self.profile}
+        a = self.active()
+        return {
+            "t": "status", "demo": self.args.demo,
+            "sim": "DEMO" if self.args.demo else (a.label if a else ""),
+            "aircraft": "" if self.args.demo else (a.status().get("aircraft", "") if a else ""),
+            "bios": "DEMO" if self.args.demo else (self.dcs.panel["aircraft"] if self.dcs and self.dcs.panel else ""),
+            "sources": {s.name: s.status() for s in self.sources},
+        }
 
-    async def broadcast_status(self):
-        await self.broadcast(self.status_msg())
-
+    # ---------- clients ----------
     async def ws_session(self, ws):
         self.clients.add(ws)
         log(f"iPad/browser connected {ws.peer[0]}  ({len(self.clients)} client(s))")
         await ws.send(self.status_msg())
         await ws.send({"t": "state", "d": self.state})
+        if self.bios:
+            await ws.send({"t": "bios", "d": self.bios})
         try:
             while True:
                 msg = await ws.recv()
@@ -346,10 +204,13 @@ class Bridge:
                     m = json.loads(msg)
                 except ValueError:
                     continue
-                if m.get("t") == "input" and isinstance(m.get("name"), str):
+                t = m.get("t")
+                if t == "input" and isinstance(m.get("name"), str):
                     name = "".join(ch for ch in m["name"] if ch.isalnum() or ch in "._-")
                     await self.trigger(name, m.get("a", "tap"))
-                elif m.get("t") == "inspect":
+                elif t == "bios" and isinstance(m.get("id"), str):
+                    await self.bios_input(m["id"], str(m.get("arg", "")))
+                elif t == "inspect":
                     await ws.send(self.inspect())
         except (asyncio.IncompleteReadError, ConnectionError):
             pass
@@ -359,14 +220,13 @@ class Bridge:
             log(f"client {ws.peer[0]} left")
 
     def inspect(self):
-        rows = []
-        for key, spec in self.mapping.cfg.get(self.profile, {}).items():
-            if key.startswith("_"):
-                continue
-            rows.append({"key": key, "unit": spec.get("unit", ""), "value": self.state.get(key),
-                         "from": self.source.get(key),
-                         "candidates": [{"p": p, "v": self.raw.get(p)} for p in spec.get("props", [])]})
-        return {"t": "inspect", "profile": self.profile, "game": self.game, "rows": rows}
+        a = self.active()
+        if a and hasattr(a, "inspect_rows"):
+            rows = a.inspect_rows(self.state)
+        else:
+            rows = [{"key": k, "unit": "", "value": v, "from": a.label if a else "", "candidates": []}
+                    for k, v in sorted(self.state.items())]
+        return {"t": "inspect", "profile": a.name if a else "-", "game": self.status_msg()["aircraft"], "rows": rows}
 
     # ---------- HTTP + WS on one port ----------
     async def handle_conn(self, reader, writer):
@@ -400,17 +260,27 @@ class Bridge:
             writer.close()
             return
 
-        await self.serve_file(writer, method, target.split("?", 1)[0])
+        path = target.split("?", 1)[0]
+        if path == "/bios/panel.json":
+            panel = self.dcs.panel if self.dcs and self.dcs.panel else None
+            if self.args.demo and not panel:
+                panel = demo_panel()
+            body = json.dumps(panel or {"aircraft": "", "categories": []}, separators=(",", ":")).encode()
+            await self.respond(writer, method, "200 OK", "application/json", body)
+            return
+        await self.serve_file(writer, method, path)
 
     async def serve_file(self, writer, method, path):
         if path == "/":
             path = "/index.html"
         f = (WEB_ROOT / path.lstrip("/")).resolve()
-        if WEB_ROOT not in f.parents and f != WEB_ROOT or not f.is_file():
-            body, status, ctype = b"Not found", "404 Not Found", "text/plain"
-        else:
-            body, status = f.read_bytes(), "200 OK"
-            ctype = mimetypes.guess_type(str(f))[0] or "application/octet-stream"
+        if (WEB_ROOT not in f.parents and f != WEB_ROOT) or not f.is_file():
+            await self.respond(writer, method, "404 Not Found", "text/plain", b"Not found")
+            return
+        ctype = mimetypes.guess_type(str(f))[0] or "application/octet-stream"
+        await self.respond(writer, method, "200 OK", ctype, f.read_bytes())
+
+    async def respond(self, writer, method, status, ctype, body):
         writer.write((f"HTTP/1.1 {status}\r\nContent-Type: {ctype}\r\nContent-Length: {len(body)}\r\n"
                       "Cache-Control: no-cache\r\nConnection: close\r\n\r\n").encode())
         if method != "HEAD":
@@ -424,8 +294,7 @@ class Bridge:
     def demo_init(self):
         self.t0 = time.time()
         self.demo = {"gear": 1, "flaps": 0, "ap": 0, "hdg_bug": 90, "alt_sel": 5000, "vs_sel": 500,
-                     "crs": 90, "baro": 1013.25, "master_arm": 0, "lights": 0}
-        self.state_demo = {}
+                     "crs": 90, "baro": 1013.25, "master_arm": 0, "chaff": 60, "flare": 30}
 
     def demo_input(self, name, action):
         if action == "release":
@@ -434,8 +303,8 @@ class Bridge:
         step = {"HDG": ("hdg_bug", 1, 360), "ALT": ("alt_sel", 100, None), "VS": ("vs_sel", 100, None),
                 "CRS": ("crs", 1, 360), "BARO": ("baro", 1, None)}
         for pre, (k, s, wrap) in step.items():
-            if n.startswith(pre + "_INC") or n.startswith(pre + "_DEC"):
-                d[k] += s if "_INC" in n else -s
+            if n in (pre + "_INC", pre + "_DEC"):
+                d[k] += s if n.endswith("_INC") else -s
                 if wrap:
                     d[k] %= wrap
         if n == "GEAR_UP":
@@ -452,36 +321,54 @@ class Bridge:
             d["ap"] ^= 1
         elif n == "MASTER_ARM":
             d["master_arm"] ^= 1
-        self.dirty.add("demo")
+        elif n == "CM_CHAFF":
+            d["chaff"] = max(0, d["chaff"] - 1)
+        elif n == "CM_FLARE":
+            d["flare"] = max(0, d["flare"] - 1)
 
     def demo_tick(self):
         t = time.time() - self.t0
-        d = self.demo
-        roll = 25 * math.sin(t / 7)
-        pitch = 4 * math.sin(t / 5)
-        hdg = (d["hdg_bug"] + 30 * math.sin(t / 11)) % 360
-        ias = 115 + 25 * math.sin(t / 13)
-        vs = 900 * math.sin(t / 9)
-        alt = 4500 + 1500 * math.sin(t / 30)
-        self.state_demo = {
-            "pitch": round(pitch, 2), "roll": round(roll, 2), "heading": round(hdg, 1), "ias": round(ias, 1),
-            "alt": round(alt), "vs": round(vs), "turn": round(roll / 25 * 20, 2), "slip": round(3 * math.sin(t / 3), 2),
-            "baro": d["baro"], "mach": round(0.6 + 0.3 * math.sin(t / 13), 3), "g": round(1 + 2.5 * abs(math.sin(t / 4)), 2),
-            "aoa": round(8 + 5 * math.sin(t / 6), 2), "rpm": round(2350 + 150 * math.sin(t / 8)),
-            "n1": round(85 + 10 * math.sin(t / 8), 1), "n2": round(97 + 2 * math.sin(t / 5), 1),
-            "nr": round(100 + 1.5 * math.sin(t / 3), 1), "torque": round(60 + 20 * math.sin(t / 7), 1),
-            "radalt": round(max(0, 300 + 300 * math.sin(t / 15))), "egt": round(620 + 60 * math.sin(t / 10)),
-            "oil_p": round(60 + 5 * math.sin(t / 12)), "oil_t": round(85 + 5 * math.sin(t / 20)),
+        d, S = self.demo, math.sin
+        roll = 25 * S(t / 7)
+        self.push({
+            "pitch": round(4 * S(t / 5), 2), "roll": round(roll, 2), "heading": round((d["hdg_bug"] + 30 * S(t / 11)) % 360, 1),
+            "ias": round(115 + 25 * S(t / 13), 1), "alt": round(4500 + 1500 * S(t / 30)), "vs": round(900 * S(t / 9)),
+            "turn": round(roll / 25 * 20, 2), "slip": round(0.4 * S(t / 3), 2), "baro": d["baro"],
+            "mach": round(0.6 + 0.3 * S(t / 13), 3), "g": round(1 + 2.5 * abs(S(t / 4)), 2), "aoa": round(8 + 5 * S(t / 6), 2),
+            "rpm": round(2350 + 150 * S(t / 8)), "n1": round(85 + 10 * S(t / 8), 1), "n2": round(97 + 2 * S(t / 5), 1),
+            "nr": round(100 + 1.5 * S(t / 3), 1), "torque": round(60 + 20 * S(t / 7), 1), "radalt": round(max(0, 300 + 300 * S(t / 15))),
+            "egt": round(620 + 60 * S(t / 10)), "oil_p": round(60 + 5 * S(t / 12)), "oil_t": round(85 + 5 * S(t / 20)),
             "fuel": round(70 - (t / 60) % 60, 1), "fuel_l": round(20 - (t / 120) % 20, 1), "fuel_r": round(19 - (t / 120) % 19, 1),
-            "fuel_flow": round(9 + math.sin(t / 5), 1), "throttle": round(70 + 20 * math.sin(t / 8)),
+            "fuel_flow": round(9 + S(t / 5), 1), "throttle": round(70 + 20 * S(t / 8)),
             "gear": d["gear"], "gear_n": d["gear"], "gear_l": d["gear"], "gear_r": d["gear"], "flaps": d["flaps"],
             "ap_master": d["ap"], "ap_hdg": d["ap"], "ap_alt": d["ap"], "ap_nav": 0, "ap_vs": 0, "ap_apr": 0,
             "hdg_bug": d["hdg_bug"], "alt_sel": d["alt_sel"], "vs_sel": d["vs_sel"], "crs": d["crs"],
             "master_arm": d["master_arm"], "master_caution": 1 if int(t) % 20 < 3 else 0, "master_warning": 0,
-            "chaff": 60, "flare": 30, "gun": 578, "volts": 28.1, "amps": round(10 + 3 * math.sin(t / 4), 1),
-            "suction": 5.0, "cht": round(380 + 20 * math.sin(t / 25)), "speedbrake": 0, "hook": 0,
-        }
-        self.dirty.add("demo")
+            "chaff": d["chaff"], "flare": d["flare"], "gun": 578, "volts": 28.1, "amps": round(10 + 3 * S(t / 4), 1),
+            "suction": 5.0, "cht": round(380 + 20 * S(t / 25)), "speedbrake": 0, "hook": 0,
+        })
+
+
+def demo_panel():
+    """A tiny fake DCS-BIOS panel so the 'DCS cockpit' page can be tried in demo mode."""
+    return {"aircraft": "DEMO", "categories": [
+        {"name": "Gear", "module": "DEMO", "controls": [
+            {"id": "GEAR_LEVER", "t": "selector", "d": "Landing Gear Lever", "p": ["UP", "DN"], "i": [["s", 1], ["f"], ["a", "TOGGLE"]], "max": 1},
+            {"id": "HOOK_LEVER", "t": "selector", "d": "Hook Handle", "p": ["UP", "DN"], "i": [["s", 1], ["f"], ["a", "TOGGLE"]], "max": 1},
+            {"id": "GEAR_LIGHT", "t": "led", "d": "Landing Gear Light", "c": "red", "max": 1}]},
+        {"name": "Weapons Panel", "module": "DEMO", "controls": [
+            {"id": "MASTER_ARM_COVER", "t": "selector", "d": "Master Arm Cover", "p": ["CLOSE", "OPEN"], "i": [["s", 1], ["f"], ["a", "TOGGLE"]], "max": 1},
+            {"id": "MASTER_ARM_SW", "t": "selector", "d": "Master Arm Switch", "p": ["ON", "OFF", "TNG"], "i": [["s", 2], ["f"]], "max": 2},
+            {"id": "MASTER_CAUTION_RESET", "t": "selector", "v": "momentary_last_position", "d": "Master Caution Reset", "i": [["s", 1]], "max": 1},
+            {"id": "MASTER_CAUTION", "t": "led", "d": "Master Caution Light", "c": "yellow", "max": 1},
+            {"id": "WEAPON_TYPE", "t": "selector", "d": "Weapon Type Wheel", "p": ["GUN", "SW-COOL", "SP", "PH"], "i": [["s", 3], ["f"]], "max": 3}]},
+        {"name": "Lights", "module": "DEMO", "controls": [
+            {"id": "INSTR_LIGHTS", "t": "limited_dial", "d": "Instrument Light Intensity", "i": [["s", 65535], ["v", 3200, 65535]], "max": 65535},
+            {"id": "ANTICOL_LIGHT", "t": "selector", "d": "Anti-Collision Light", "p": ["OFF", "ON"], "i": [["s", 1], ["f"], ["a", "TOGGLE"]], "max": 1}]},
+        {"name": "Displays", "module": "DEMO", "controls": [
+            {"id": "FUEL_TOTAL", "t": "display", "d": "Fuel Total Counter", "len": 5},
+            {"id": "HYD_PRESS", "t": "analog_gauge", "d": "Hydraulic Pressure Needle", "max": 65535}]},
+    ]}
 
 
 def lan_ips():
@@ -502,11 +389,12 @@ def lan_ips():
 
 
 async def main():
-    ap = argparse.ArgumentParser(description="SimDash bridge: SimHub <-> iPad dashboard")
+    ap = argparse.ArgumentParser(description="SimDash bridge: MSFS / DCS <-> iPad dashboard")
     ap.add_argument("--port", type=int, default=8787, help="HTTP/WebSocket port for the iPad (default 8787)")
-    ap.add_argument("--simhub", default="127.0.0.1:18082", help="SimHub Property Server host:port")
-    ap.add_argument("--profile", help="force a profile from properties.json (e.g. msfs, dcs)")
-    ap.add_argument("--demo", action="store_true", help="generate fake flight data (no SimHub needed)")
+    ap.add_argument("--source", default="msfs,dcs", help="comma list of: msfs, dcs, simhub (default msfs,dcs)")
+    ap.add_argument("--simhub", default="127.0.0.1:18082", help="SimHub Property Server host:port (with --source simhub)")
+    ap.add_argument("--profile", help="SimHub: force a profile from properties.json")
+    ap.add_argument("--demo", action="store_true", help="generate fake flight data (no sim needed)")
     ap.add_argument("-v", "--verbose", action="store_true", help="log every button press")
     args = ap.parse_args()
 
@@ -514,10 +402,20 @@ async def main():
     tasks = [b.publish_loop()]
     if args.demo:
         b.demo_init()
-        b.profile = "demo"
         log("DEMO mode - generating fake flight data")
     else:
-        tasks.append(b.simhub_loop())
+        wanted = [s.strip().lower() for s in args.source.split(",") if s.strip()]
+        if "msfs" in wanted:
+            from src_msfs import MsfsSource
+            b.sources.append(MsfsSource(b, log))
+        if "dcs" in wanted:
+            from src_dcs import DcsSource
+            b.dcs = DcsSource(b, log)
+            b.sources.append(b.dcs)
+        if "simhub" in wanted:
+            from src_simhub import SimHubSource
+            b.sources.append(SimHubSource(b, log, args.simhub, args.profile))
+        tasks += [s.run() for s in b.sources]
 
     server = await asyncio.start_server(b.handle_conn, "0.0.0.0", args.port)
     log("SimDash bridge running. On the iPad, open Safari at:")
