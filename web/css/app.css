@@ -780,3 +780,42 @@ body.mode-night .lever-track, body.mode-night .trim-wheel, body.mode-nvg .lever-
 .radio.xpdr .radio-stby.big { width: 100%; }
 .radio { grid-template-rows: auto 1fr auto auto; }
 .radio-swap { min-height: 50px; }
+
+/* ======================================================================
+   Helicopter hover & rescue
+   ====================================================================== */
+.hv { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.hv-svg { width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); }
+.hv-drift { position: absolute; left: 12px; bottom: 10px; font-family: var(--digital-font); font-size: 16px; color: #cfd6dd; background: #000b; padding: 6px 10px; border-radius: 8px; }
+.hv-drift b { color: #3dff6e; }
+.hv-scale { position: absolute; right: 10px; bottom: 10px; min-height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #000; background: #1d2126; color: #e9ecef; font-weight: 700; font-size: 12px; cursor: pointer; }
+.group.hv-side > .group-body { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 8px; }
+.hv-ralt { background: #000; border: 2px solid #2a2e33; border-radius: 12px; padding: 8px; text-align: center; }
+.hv-ralt-v { font-family: var(--digital-font); font-size: clamp(40px, 5vw, 64px); color: #3dff6e; line-height: 1.1; }
+.hv-ralt-u { font-size: 11px; color: var(--muted); letter-spacing: 2px; }
+.hv-ralt.low .hv-ralt-v { color: #ffb000; }
+.hv-vs { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
+.hv-vs-track { position: relative; height: 26px; background: #070707; border: 1px solid #333; border-radius: 5px; overflow: hidden; transform: rotate(-90deg) scaleX(-1); display: none; }
+.hv-vs .hv-vs-track { display: block; transform: none; height: 90px; width: 26px; justify-self: center; }
+.hv-vs-zero { position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: #666; }
+.hv-vs-fill { position: absolute; left: 3px; right: 3px; background: #3dff6e; transition: height var(--ease), bottom var(--ease); }
+.hv-vs-fill.down { background: #ffb000; }
+.hv-vs-v { font-family: var(--digital-font); font-size: 22px; color: #e9ecef; min-width: 4ch; text-align: right; }
+.rs-nav { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.rs-name { font-weight: 800; letter-spacing: 1px; color: #ff66ff; text-align: center; }
+.rs-svg { width: min(100%, 300px); aspect-ratio: 1; }
+.rs-svg g { transition: transform 200ms linear; }
+.rs-info { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; width: 100%; }
+.rs-info div { display: flex; justify-content: space-between; border-bottom: 1px solid #222; padding: 4px 0; }
+.rs-info span { color: var(--muted); font-size: 12px; letter-spacing: 1px; }
+.rs-info b { font-family: var(--digital-font); font-size: 20px; color: #e9ecef; }
+.rs-wind, .rs-search { background: #0b0d10; border: 1px solid #2a2e33; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.rs-wind-v { font-family: var(--digital-font); font-size: 30px; color: #4cc9f0; }
+.rs-wind-s { font-size: 15px; color: #cfd6dd; }
+.rs-search-i { font-size: 17px; line-height: 1.5; }
+.rs-search-i b { font-family: var(--digital-font); color: #3dff6e; }
+.rs-search.due { border-color: #ffb000; box-shadow: 0 0 14px #ffb00066; }
+.group.rs-buttons > .group-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+body.mode-night .hv-svg, body.mode-nvg .hv-svg { filter: brightness(0.75); }
+
+.group.switches > .group-body { overflow-y: auto; align-content: start; }

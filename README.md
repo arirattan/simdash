@@ -32,6 +32,17 @@ The bridge connects **directly to the sims**, so SimHub isn't needed:
   - METAR/TAF weather, with a nearest-stations button.
   - An E6B (wind triangle, runway crosswind, density altitude, fuel, descent, conversions). Values fill in from the sim.
   - SimBrief OFP and navlog.
+- **Heli hover & rescue** (MSFS & DCS):
+  - **HOVER:** a top-down drift display. The velocity vector shows forward/aft and left/right drift in knots, on
+    rings that auto-scale (10/20/40 kt), with a wind arrow relative to the nose and a marker toward your target.
+  - Next to it: a big radar altitude (amber below 50 ft), a vertical-speed bar, GS, torque, NR and TOT.
+  - The HOVER page is also added to the Civil and Military helicopter dashboards.
+  - **RESCUE:**
+    - A bearing arrow to the target, with distance, ETE and "turn left/right".
+    - The target is shared with the moving map's Direct-To, and **MARK POSITION** saves where you are.
+    - Wind components with a "turn to face it" hint.
+    - An expanding-square search helper (leg heading, length and time left).
+    - ATT/ALT/HDG holds and lights.
 - **Ag & Fire** (MSFS 2024 liquid-dropping system):
   - Hopper/tank level.
   - Hold-to-drop / spray, door open/close, and scoop down/up for the AT-802, CL-415 and Air Crane.

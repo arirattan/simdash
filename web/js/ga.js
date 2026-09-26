@@ -415,7 +415,7 @@
         [Group('TRANSPONDER · ADF', [W(Transponder, {}), W(AdfRadio, {})], 'col')],
         [Group('AUTOPILOT', [W(KAP140, {})], 'col')],
       ] },
-      { title: 'CONTROLS', cols: 4, rowsTpl: '1fr auto', cells: [
+      { title: 'CONTROLS', cols: 4, rowsTpl: '1fr 104px', cells: [
         [quadrant(false), 2, 1],
         [Group('', [W(C.Selector, { text: 'FLAPS', key: 'flaps', inc: 'FLAPS_INC', dec: 'FLAPS_DEC', positions: ['UP', '10°', '20°', 'FULL'] }), fuelSel, magKey], 'col stack-left')],
         [Group('SWITCHES', [

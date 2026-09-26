@@ -10,7 +10,7 @@
 
   // ---------- home ----------
   const list = $('#dash-list');
-  const ORDER = ['prop', 'g1000', 'map', 'efb', 'civil-heli', 'agfire', 'civil-plane', 'dcs-cockpit', 'apache', 'mil-jet', 'mil-heli'];
+  const ORDER = ['prop', 'g1000', 'map', 'efb', 'heli', 'civil-heli', 'agfire', 'civil-plane', 'dcs-cockpit', 'apache', 'mil-jet', 'mil-heli'];
   const ids = ORDER.filter((k) => D[k]).concat(Object.keys(D).filter((k) => !ORDER.includes(k)));
   ids.map((id) => [id, D[id]]).forEach(([id, d]) => {
     const b = document.createElement('button');

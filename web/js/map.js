@@ -181,8 +181,13 @@
   }
 
   // ------------------------------------------------------------------ Direct-To
-  function setTarget(t) {
+  function setTarget(t, quiet) {
     target = t;
+    // shared with the helicopter RESCUE page (and restored when the map reopens)
+    try {
+      if (t) localStorage.setItem('simdash.target', JSON.stringify({ lat: t.pos[0], lon: t.pos[1], name: t.name }));
+      else localStorage.removeItem('simdash.target');
+    } catch (e) { /* ignore */ }
     if (!t) {
       targetLine.setLatLngs([]);
       ['to', 'brg', 'dist', 'ete'].forEach((k) => { strip[k].textContent = '---'; });
@@ -193,7 +198,7 @@
     setTarget.m = LL.circleMarker(t.pos, { radius: 9, color: '#ff00ff', weight: 3, fill: false }).addTo(map);
     if (lastPos) targetLine.setLatLngs([lastPos, t.pos]);
     strip.to.textContent = t.name;
-    say('Direct-To ' + t.name);
+    if (!quiet) say('Direct-To ' + t.name);
   }
 
   // ------------------------------------------------------------------ airports
@@ -341,6 +346,11 @@
     drawRings();
     loadAirports();
     setTimeout(() => map && map.invalidateSize(), 200);
+    // restore a Direct-To target (possibly set on the helicopter RESCUE page)
+    try {
+      const saved = JSON.parse(localStorage.getItem('simdash.target') || 'null');
+      if (saved && typeof saved.lat === 'number') setTarget({ pos: [saved.lat, saved.lon], name: saved.name || 'TGT' }, true);
+    } catch (e) { /* ignore */ }
     // "SHOW ON MAP" in the Flight bag's SimBrief page
     try {
       if (JSON.parse(localStorage.getItem('simdash.efb.sb.showOnMap') || 'false')) {

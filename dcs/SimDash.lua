@@ -46,6 +46,18 @@ function SimDash.collect()
 	if vel then
 		put("gs", math.sqrt(vel.x * vel.x + vel.z * vel.z) * 1.943844)
 		put("track", (math.atan2(vel.z, vel.x) * R2D) % 360)
+		-- body-axis drift for the helicopter hover display (ft/s, forward + / right +)
+		if me and me.Heading then
+			local h = me.Heading
+			put("vel_z", (vel.x * math.cos(h) + vel.z * math.sin(h)) * 3.28084)
+			put("vel_x", (-vel.x * math.sin(h) + vel.z * math.cos(h)) * 3.28084)
+		end
+	end
+	local wind = LoGetVectorWindVelocity and LoGetVectorWindVelocity() or nil -- wind vector (blowing TO), m/s
+	if wind then
+		local spd = math.sqrt(wind.x * wind.x + wind.z * wind.z)
+		put("wind_kt", spd * 1.943844)
+		if spd > 0.1 then put("wind_dir", (math.atan2(-wind.z, -wind.x) * R2D) % 360) end
 	end
 
 	local ias = LoGetIndicatedAirSpeed(); if ias then put("ias", ias * 1.943844) end
