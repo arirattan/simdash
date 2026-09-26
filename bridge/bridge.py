@@ -304,6 +304,16 @@ class Bridge:
         self.t0 = time.time()
         self.demo = {"gear": 1, "flaps": 0, "ap": 0, "hdg_bug": 90, "alt_sel": 5000, "vs_sel": 500,
                      "crs": 90, "baro": 1013.25, "master_arm": 0, "chaff": 60, "flare": 30}
+        # sample AH-64D up-front display / keyboard / CMWS text for the Apache page
+        eufd = ["ENGINE 1 OUT        |UHF  305.000  305.000", "                    |VHF  127.000  135.000",
+                "                    |FM1   30.000   30.000", "        TAIL WHEEL UNLOCKED  |FM2   30.000   30.000",
+                "                    |HF     2.0000A  2.0000A", "", "", "*SQL  RTS  UHF VHF FM1 FM2 HF",
+                "", "", "", "", "FUEL  2450 LBS   ENDR 2+10", "          12:34:56 Z"]
+        self.push_bios({**{f"PLT_EUFD_LINE{i + 1}": t for i, t in enumerate(eufd)},
+                        **{f"CPG_EUFD_LINE{i + 1}": t for i, t in enumerate(eufd)},
+                        "PLT_KU_DISPLAY": "WPT FLY-TO A01", "CPG_KU_DISPLAY": "TGT T01",
+                        "PLT_CMWS_FLARE_COUNT": "30", "PLT_CMWS_CHAFF_COUNT": "00", "CPG_CMWS_FLARE_COUNT": "30",
+                        "PLT_MASTER_ARM_SAFE_L": 1, "PLT_CMWS_FWD_LEFT_BRT_L": 1, "PLT_MASTER_CAUTION_L": 1})
 
     def demo_input(self, name, action):
         if action == "release":

@@ -127,8 +127,8 @@
       if (arg === 'TOGGLE') v = cur ? 0 : 1;
       else if (arg === 'INC') v = cur + 1;
       else if (arg === 'DEC') v = Math.max(0, cur - 1);
-      else if (/^[+-]d+$/.test(arg)) v = Math.max(0, Math.min(65535, cur + parseInt(arg, 10)));
-      else if (/^d+$/.test(arg)) v = parseInt(arg, 10);
+      else if (/^[+-]\d+$/.test(arg)) v = Math.max(0, Math.min(65535, cur + parseInt(arg, 10)));
+      else if (/^\d+$/.test(arg)) v = parseInt(arg, 10);
       apply({ [k]: v });
       if (id === 'GEAR_LEVER') apply({ 'bios:GEAR_LIGHT': 1 }), setTimeout(() => apply({ 'bios:GEAR_LIGHT': 0 }), 2500);
     },

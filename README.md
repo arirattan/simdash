@@ -57,6 +57,16 @@ Tip: once you know a control's name from that page, a generic dashboard button c
 4. Open the **DCS cockpit** dashboard on the iPad for every control of that aircraft. It has categories by panel,
    a search box, and PILOT / RIO / WSO / CPG filters.
 
+**AH-64D Apache dashboard** (needs DCS-BIOS). Use **SEAT** to switch between PILOT and CPG; controls the current seat
+doesn't have are hidden automatically.
+- **MPD:** both MPD bezels (T1–T6, B1–B6 with M, L1–L6, R1–R6, FCR / WPN / TSD / * / VID / COM / A/C, and MODE / BRT / VIDEO).
+  The left screen shows attitude and flight data; the right screen mirrors the EUFD text.
+- **EUFD · KU:** the real Up-Front Display text (14 lines) with WCA / IDM / RTS rockers, PRESET / ENT / SWAP / STOPWATCH,
+  and the full keyboard unit with its scratchpad.
+- **PANELS:** master warning / caution, A/S arm and GND ORIDE, jettison stations, fire panel (covers lift first), engine
+  start, APU, rotor brake, master ignition, CMWS (flare/chaff counts + threat sectors), emergency panel, and lights.
+- **FLIGHT:** airspeed, attitude, altimeter, radar altimeter, heading, VSI and engine RPM, from SimDash.lua.
+
 Generic dashboards (Military jet / helicopter): flight instruments come from `SimDash.lua` for any aircraft.
 Their switches are connected to DCS-BIOS for the **F-14, F-4E and AH-64D** in `bridge/dcs.json`; you can add more aircraft
 there. If a gauge moves the wrong way in DCS (e.g. the attitude indicator banks backwards), set `flip` in `dcs.json`.
