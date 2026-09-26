@@ -397,6 +397,19 @@ def demo_panel():
     ]}
 
 
+async def supervise(source):
+    """Run a sim connection; if it ever crashes, log it and restart it instead of stopping the bridge."""
+    while True:
+        try:
+            await source.run()
+            return  # run() only returns when the source is disabled (e.g. no SimConnect.dll)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log(f"{source.label}: crashed ({e!r}) - restarting in 3 s")
+            await asyncio.sleep(3)
+
+
 def lan_ips():
     ips = set()
     try:
@@ -442,7 +455,7 @@ async def main():
         if "simhub" in wanted:
             from src_simhub import SimHubSource
             b.sources.append(SimHubSource(b, log, args.simhub, args.profile))
-        tasks += [s.run() for s in b.sources]
+        tasks += [supervise(s) for s in b.sources]
 
     server = await asyncio.start_server(b.handle_conn, "0.0.0.0", args.port)
     log("SimDash bridge running. On the iPad, open Safari at:")

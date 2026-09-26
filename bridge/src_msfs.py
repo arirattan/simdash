@@ -166,7 +166,14 @@ class MsfsSource:
             self.h, self.last_msg = h, time.time()
             try:
                 self.setup()
-                while self.pump():
+                while True:
+                    try:
+                        if not self.pump():
+                            break
+                    except OSError:
+                        raise
+                    except Exception as e:  # a bad value must never kill the connection
+                        self.log(f"MSFS: skipped a bad update ({e!r})")
                     await asyncio.sleep(0.012)
             except OSError as e:
                 self.log(f"MSFS: connection error {e}")
@@ -269,8 +276,13 @@ class MsfsSource:
         for k in list(out):
             if k.startswith("_"):
                 self.hidden[k] = out.pop(k)
-        if "xpdr" in out:  # transponder comes back as BCD (0x1200 -> 1200)
-            out["xpdr"] = int(format(int(out["xpdr"]), "x") or 0)
+        if "xpdr" in out:
+            # MSFS 2024 reports the squawk as a plain number (7000); older builds used BCD (0x7000 = 28672)
+            v = int(out["xpdr"])
+            digits = str(v)
+            if len(digits) > 4 or any(c in "89" for c in digits):
+                digits = format(v, "x")
+            out["xpdr"] = int(digits) if digits.isdigit() else 0
         cap = self.hidden.get("_fuel_cap")
         if "_fuel_qty" in self.hidden and cap:
             out["fuel"] = self.hidden["_fuel_qty"] / cap * 100
