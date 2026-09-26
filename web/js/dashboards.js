@@ -346,4 +346,5 @@
   };
 
   global.DASHBOARDS = DASHBOARDS;
+  global.INSTRUMENT_PRESETS = I;   // reused by the custom panel editor
 })(window);

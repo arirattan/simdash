@@ -83,12 +83,26 @@ class Api:
                 return self.in_bbox(q.get("bbox", ""), int(q.get("max", 400)))
             if path == "/api/nearest":
                 return self.nearest(float(q["lat"]), float(q["lon"]), int(q.get("n", 10)), q.get("heli") == "1")
+            if path == "/api/layouts":
+                f = DATA / "layouts.json"
+                return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else {"pages": [], "ts": 0}
             if path == "/api/airport":
                 a = self.by_id.get(q.get("id", "").upper())
                 return a or {"error": "unknown airport"}
         except Exception as e:  # never break the bridge on a bad request / offline internet
             return {"error": str(e)}
         return {"error": "unknown api"}
+
+    def save_layouts(self, body):
+        """Custom panels from the iPad editor (max 2 MB of JSON)."""
+        data = json.loads(body.decode("utf-8"))
+        if not isinstance(data, dict) or not isinstance(data.get("pages"), list):
+            return {"error": "bad layout"}
+        DATA.mkdir(exist_ok=True)
+        tmp = DATA / "layouts.json.tmp"
+        tmp.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+        tmp.replace(DATA / "layouts.json")
+        return {"ok": True, "ts": data.get("ts", 0)}
 
     # ---------------------------------------------------------------- weather
     def wx(self, kind, ids):

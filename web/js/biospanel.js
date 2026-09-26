@@ -266,6 +266,16 @@
     root = null;
   }
 
+  // shared with the custom panel editor: build a widget for any cockpit control of the current aircraft
+  global.BiosPanel = {
+    widgetFor,
+    async fetchPanel() {
+      const host = new URLSearchParams(location.search).get('host');
+      const r = await fetch((host ? `http://${host}` : '') + '/bios/panel.json', { cache: 'no-store' });
+      return r.json();
+    }
+  };
+
   global.DASHBOARDS['dcs-cockpit'] = {
     name: 'Cockpit', icon: '🎛', sub: 'every switch of the aircraft you are flying (MSFS & DCS)',
     custom: { mount, unmount }

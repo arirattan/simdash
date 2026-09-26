@@ -269,6 +269,8 @@
   ], 'hv-side');
   const HOVER_PAGE = { title: 'HOVER', cols: 3, rows: 1, cells: [[W(HoverDisplay, {}), 2, 1], [hoverSide]] };
 
+  global.HELI_WIDGETS = { HoverDisplay, RadAlt, VsBar, TargetNav, WindCard, SearchPattern };
+
   global.DASHBOARDS.heli = {
     name: 'Heli hover & rescue', icon: '🚑', sub: 'drift / hover vector, radalt · rescue: target bearing, mark, wind, search pattern',
     pages: [

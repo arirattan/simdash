@@ -32,6 +32,23 @@ The bridge connects **directly to the sims**, so SimHub isn't needed:
   - METAR/TAF weather, with a nearest-stations button.
   - An E6B (wind triangle, runway crosswind, density altitude, fuel, descent, conversions). Values fill in from the sim.
   - SimBrief OFP and navlog.
+- **My panels:** build your own pages right on the iPad.
+  - Tap **✎ EDIT**, then tap an empty cell to add a widget:
+    - any instrument from the other dashboards (six-pack, CDI, ADF, tachs, torque, hover display, radios, KAP 140…)
+    - readouts, bar gauges, round dials and warning lamps (pick any sim value)
+    - buttons, toggle switches, knobs and levers
+    - labels
+    - **any live cockpit control of the current aircraft** (MSFS input events / DCS-BIOS)
+  - Tap a widget to move (arrows, or tap an empty cell), resize (W±/H±), edit, copy or delete it.
+  - Pages: rename, grid size, add, duplicate, reorder and delete.
+  - **EXPORT / IMPORT** layouts as text to share them or back them up.
+  - What a button, switch or knob sends can be picked from lists:
+    - `K:EVENT` or `K:EVENT=value`: MSFS sim event
+    - `@INPUT_EVENT`: MSFS cockpit input event
+    - `bios:ID [ARG]`: cockpit control; without ARG it acts as a push button
+    - a named input from `msfs.json` / `dcs.json`
+  - **TEST** fires an action right from the editor.
+  - Layouts are saved on the iPad and on the bridge (`bridge/data/layouts.json`), so they survive clearing Safari.
 - **Heli hover & rescue** (MSFS & DCS):
   - **HOVER:** a top-down drift display. The velocity vector shows forward/aft and left/right drift in knots, on
     rings that auto-scale (10/20/40 kt), with a wind arrow relative to the nose and a marker toward your target.

@@ -403,6 +403,8 @@
   const propRpm = W(G.Dial, { key: 'prop_rpm', min: 0, max: 2400, start: -135, end: 135, major: 200, minor: 100, labelScale: 0.01, labels: [0, 400, 800, 1200, 1600, 2000, 2400], title: 'PROP RPM', unit: 'x100',
     arcs: [{ from: 1600, to: 2200, color: '#1db32a' }, { from: 2200, to: 2400, color: '#e0201b' }], digital: 'prop_rpm' });
 
+  global.GA_WIDGETS = { CDI, ADF, Tank, KAP140, Transponder, AdfRadio, Lever, TrimWheel, Radio, Seg };
+
   global.DASHBOARDS.prop = {
     name: 'Prop & Cessna', icon: '🛫', sub: 'six-pack + CDI/ADF · radio stack & KAP 140 · levers, trim, fuel, mags',
     pages: [

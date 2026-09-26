@@ -43,6 +43,16 @@
 
   function input(name, a) {
     if (!name) return;
+    // "bios:IDENT [ARG]" = cockpit control (DCS-BIOS / MSFS input event). Without ARG it acts as a
+    // push button: 1 on press, 0 on release.
+    if (name.startsWith('bios:')) {
+      const parts = name.slice(5).trim().split(/\s+/);
+      const id = parts.shift(), arg = parts.join(' ');
+      if (!id) return;
+      if (a === 'release') { if (!arg) biosCmd(id, 0); return; }
+      biosCmd(id, arg || 1);
+      return;
+    }
     if (localDemo) return Demo.input(name, a);
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'input', name, a }));
   }

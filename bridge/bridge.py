@@ -271,6 +271,18 @@ class Bridge:
             return
 
         path, _, query = target.partition("?")
+        if method == "POST" and path == "/api/layouts":
+            n = int(headers.get("content-length", "0") or 0)
+            if 0 < n <= 2_000_000:
+                try:
+                    body = await asyncio.wait_for(reader.readexactly(n), 10)
+                    res = self.api.save_layouts(body)
+                except (asyncio.IncompleteReadError, asyncio.TimeoutError, ValueError) as e:
+                    res = {"error": str(e)}
+            else:
+                res = {"error": "layout too large or empty"}
+            await self.respond(writer, method, "200 OK", "application/json", json.dumps(res).encode())
+            return
         if path.startswith("/api/"):
             res = await self.api.handle(path, query)
             await self.respond(writer, method, "200 OK", "application/json", json.dumps(res, separators=(",", ":")).encode())
