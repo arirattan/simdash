@@ -328,7 +328,7 @@ body.mode-night .light-btn, body.mode-nvg .light-btn { color: var(--text); borde
 .seg button { background: var(--panel-2); border: 1px solid var(--edge); border-radius: 8px; padding: 12px 6px; font-size: 15px; cursor: pointer; }
 .seg button.active { border-color: var(--cyan); background: #0e3b52; }
 body.mode-night .seg button.active, body.mode-nvg .seg button.active { background: var(--edge); border-color: var(--text); }
-#dim { width: 100%; height: 36px; accent-color: var(--cyan); }
+#dim, #fb-vol { width: 100%; height: 36px; accent-color: var(--cyan); }
 body.mode-night .sheet-card, body.mode-nvg .sheet-card { background: var(--bg); }
 body.mode-night .dash-card, body.mode-nvg .dash-card { background: var(--panel); }
 body.mode-night .instrument img.bg, body.mode-nvg .instrument img.bg,

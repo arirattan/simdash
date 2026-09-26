@@ -53,6 +53,15 @@
       <div class="menu-label">Brightness <span id="dim-val"></span></div>
       <input type="range" id="dim" min="25" max="100" step="5" value="100">
     </div>
+    <div class="menu-block">
+      <div class="menu-label">Click feedback <small>(sound for every button, switch and knob detent; iPads have no vibration motor)</small></div>
+      <div class="seg" id="fb-seg" style="grid-template-columns: 1fr 1fr">
+        <button data-on="1">🔊 On</button>
+        <button data-on="0">🔇 Off</button>
+      </div>
+      <div class="menu-label">Click volume</div>
+      <input type="range" id="fb-vol" min="5" max="100" step="5" value="70">
+    </div>
     <button class="menu-item" data-act="log">Show button log <small>displays each input name as you press it — handy while binding in SimHub</small></button>
     <button class="menu-item" data-act="reload">Reload</button>
     <button class="menu-item close" data-act="close">Close</button>
@@ -71,6 +80,7 @@
 <div id="input-log" class="hidden"></div>
 <div id="dimmer"></div>
 
+<script src="js/feedback.js"></script>
 <script src="js/gauges.js"></script>
 <script src="js/link.js"></script>
 <script src="js/controls.js"></script>

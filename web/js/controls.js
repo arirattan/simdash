@@ -150,6 +150,7 @@
         const dir = Math.sign(active.acc);
         active.acc -= dir * detent;
         moved++;
+        if (global.Feedback) global.Feedback.play('detent');
         click(dir);
       }
     });
@@ -318,6 +319,7 @@
         const dir = Math.sign(act.acc);
         act.acc -= dir * detent;
         act.moved++;
+        if (global.Feedback) global.Feedback.play('detent');
         send(act.zone, dir);
       }
     });

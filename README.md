@@ -74,7 +74,18 @@ there. If a gauge moves the wrong way in DCS (e.g. the attitude indicator banks 
 ## 4. Panel lighting (night mode)
 The **☀** button cycles **Day → Night (red backlight) → NVG (green)** on every panel. **⚙ › Brightness** dims further.
 
-## 5. Other tools
+## 5. Click feedback
+Every control makes a short mechanical sound:
+- push buttons click down and up
+- toggle switches and selectors clack
+- knobs tick once per detent while you turn them
+- guard covers thud
+
+Turn it on or off and set the volume in **⚙ › Click feedback**. iPads have no vibration motor, so true haptics aren't
+possible; sound is the closest substitute. On Android tablets the same taps also vibrate. If the iPad is muted,
+the clicks are muted too.
+
+## 6. Other tools
 - **⚙ › Property inspector:** live list of every value arriving from the sim.
 - **⚙ › Show button log:** shows each input name as you tap a control.
 - **SimHub mode (optional, old way):** `start-bridge-simhub.bat` uses SimHub's Property Server plugin with
