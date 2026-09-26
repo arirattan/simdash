@@ -6,7 +6,9 @@ Streams parts of the PC screen to the iPad as pictures it refreshes several time
 
 * DCS displays exported with setup_screens.py - e.g. the AH-64D MPDs (TSD, FCR radar, video pages)
   and the TEDAC with the TADS FLIR / TV picture, or the MFDs of the F/A-18, F-16, A-10...
-* any window or area of the desktop you add to bridge/data/screens.json (e.g. an MSFS pop-out window).
+* the MSFS G1000 PFD / MFD: the sim's own pop-out windows (Right-Alt + click the screen in the cockpit),
+  found on their own as G1000_PFD / G1000_MFD, no setup needed.
+* any window or area of the desktop you add to bridge/data/screens.json.
 
 bridge/data/screens.json:
     {
@@ -14,11 +16,13 @@ bridge/data/screens.json:
       "quality": 70,
       "screens": {
         "LEFT_MFCD": {"label": "Left MFD", "x": 1920, "y": 0, "w": 640, "h": 640},
-        "PFD":       {"label": "MSFS PFD pop-out", "window": "PFD"}
+        "PFD":       {"label": "MSFS PFD pop-out", "window": "PFD"},
+        "G1000_MFD": {"label": "G1000 MFD", "popout": 1}
       }
     }
-  x / y / w / h are desktop pixels. With "window", x / y / w / h are optional and relative to that
-  window's inside (so a part of a window can be shown).
+  x / y / w / h are desktop pixels. With "window" (a part of the window title) or "popout" (the n-th MSFS
+  pop-out window, counted left to right), x / y / w / h are optional and relative to that window's inside
+  (so a part of a window can be shown). Entries here replace the built-in G1000_PFD / G1000_MFD.
 
 Windows only (GDI through ctypes, no pip packages). Pictures are PNG; if Pillow is installed
 (pip install pillow) they are JPEG instead, which is about 10x smaller and so smoother on Wi-Fi.
@@ -77,6 +81,7 @@ if WIN:
     user32.IsIconic.argtypes = [wintypes.HWND]
     user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
     user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
     user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
 
@@ -91,6 +96,13 @@ if WIN:
 
 SRCCOPY = 0x00CC0020
 MAX_SIDE = 2048
+
+# MSFS pop-outs (Right-Alt + click an instrument) are untitled windows of class AceApp (Pop Out Panel Manager
+# renames them "Custom - PFD" / "... (Custom)"). Counted left to right, so the PFD goes left of (or above) the MFD.
+DEFAULTS = {
+    "G1000_PFD": {"label": "G1000 PFD (MSFS pop-out 1)", "popout": 1},
+    "G1000_MFD": {"label": "G1000 MFD (MSFS pop-out 2)", "popout": 2},
+}
 
 
 def grab_bgra(x, y, w, h):
@@ -117,35 +129,71 @@ def grab_bgra(x, y, w, h):
         user32.ReleaseDC(None, screen)
 
 
+def window_title(hwnd):
+    n = user32.GetWindowTextLengthW(hwnd)
+    if not n:
+        return ""
+    b = ctypes.create_unicode_buffer(n + 1)
+    user32.GetWindowTextW(hwnd, b, n + 1)
+    return b.value
+
+
 def find_window(title):
     """First visible window whose title contains `title` (case-insensitive)."""
     want, found = title.lower(), []
 
     def cb(hwnd, _):
-        if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd):
-            n = user32.GetWindowTextLengthW(hwnd)
-            if n:
-                b = ctypes.create_unicode_buffer(n + 1)
-                user32.GetWindowTextW(hwnd, b, n + 1)
-                if want in b.value.lower():
-                    found.append(hwnd)
-                    return False
+        if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd) and want in window_title(hwnd).lower():
+            found.append(hwnd)
+            return False
         return True
 
     user32.EnumWindows(EnumWindowsProc(cb), 0)
     return found[0] if found else None
 
 
-def window_rect(spec):
-    hwnd = find_window(spec["window"])
-    if not hwnd:
-        raise LookupError(f"window '{spec['window']}' not found (is it open and not minimised?)")
+def client_rect(hwnd):
+    """Inside of a window in desktop pixels: x, y, w, h."""
     r, p = wintypes.RECT(), wintypes.POINT(0, 0)
     user32.GetClientRect(hwnd, ctypes.byref(r))
     user32.ClientToScreen(hwnd, ctypes.byref(p))
-    x, y = p.x + int(spec.get("x", 0)), p.y + int(spec.get("y", 0))
-    w = int(spec.get("w", r.right - int(spec.get("x", 0))))
-    h = int(spec.get("h", r.bottom - int(spec.get("y", 0))))
+    return p.x, p.y, r.right, r.bottom
+
+
+def msfs_popouts():
+    """MSFS pop-out instrument windows, left to right (then top to bottom)."""
+    found = []
+
+    def cb(hwnd, _):
+        if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd):
+            b = ctypes.create_unicode_buffer(32)
+            user32.GetClassNameW(hwnd, b, 32)
+            title = window_title(hwnd).lower() if b.value == "AceApp" else None
+            if title is not None and (not title or "custom" in title):  # not the main window, ATC, VFR map...
+                x, y, w, h = client_rect(hwnd)
+                if w >= 64 and h >= 64:
+                    found.append((x, y, hwnd))
+        return True
+
+    user32.EnumWindows(EnumWindowsProc(cb), 0)
+    return [hwnd for _, _, hwnd in sorted(found)]
+
+
+def window_rect(spec):
+    if "popout" in spec:
+        n, pops = int(spec["popout"]), msfs_popouts()
+        if not 0 < n <= len(pops):
+            raise LookupError(f"MSFS pop-out {n} not found ({len(pops)} open): in the cockpit, Right-Alt + click the PFD, "
+                              "then the MFD, and keep them visible on the PC screen")
+        hwnd = pops[n - 1]
+    else:
+        hwnd = find_window(spec["window"])
+        if not hwnd:
+            raise LookupError(f"window '{spec['window']}' not found (is it open and not minimised?)")
+    x0, y0, cw, ch = client_rect(hwnd)
+    x, y = x0 + int(spec.get("x", 0)), y0 + int(spec.get("y", 0))
+    w = int(spec.get("w", cw - int(spec.get("x", 0))))
+    h = int(spec.get("h", ch - int(spec.get("y", 0))))
     return x, y, w, h
 
 
@@ -257,6 +305,14 @@ class Screens:
                 self.cache.clear()
         return self.conf
 
+    def screens(self):
+        """Configured screens, then the built-in G1000 pop-outs (Windows only)."""
+        out = dict(self.config().get("screens", {}))
+        if WIN:
+            for name, spec in DEFAULTS.items():
+                out.setdefault(name, spec)
+        return out
+
     def fps(self):
         return max(1.0, min(30.0, float(self.config().get("fps", 8))))
 
@@ -264,18 +320,17 @@ class Screens:
         if self.demo_only():
             return {"available": True, "screens": [{"name": self.DEMO, "label": "Demo FLIR (fake picture)", "w": DemoFlir.W, "h": DemoFlir.H}],
                     "fps": 10, "format": "png", "error": ""}
-        conf = self.config()
-        screens =[{"name": n, "label": s.get("label", n), "w": s.get("w"), "h": s.get("h"), "window": s.get("window")}
-                   for n, s in conf.get("screens", {}).items()]
+        screens = [{"name": n, "label": s.get("label", n), "w": s.get("w"), "h": s.get("h"), "window": s.get("window")}
+                   for n, s in self.screens().items()]
         err = "" if WIN else "live screens need the bridge to run on Windows"
-        if WIN and not screens:
+        if WIN and not self.config().get("screens"):  # only the built-in G1000 pop-outs
             err = "no screens set up yet - run setup-screens.bat on the PC"
         return {"available": WIN and bool(screens), "screens": screens, "fps": self.fps(),
                 "format": "jpeg" if Image is not None else "png", "error": err}
 
     # ---------- capture ----------
     def grab(self, spec):
-        if "window" in spec:
+        if "window" in spec or "popout" in spec:
             x, y, w, h = window_rect(spec)
         else:
             x, y, w, h = (int(spec[k]) for k in ("x", "y", "w", "h"))
@@ -291,7 +346,7 @@ class Screens:
             return await asyncio.to_thread(self.demo_flir.frame)
         if not WIN:
             raise OSError("live screens need the bridge to run on Windows")
-        spec = self.config().get("screens", {}).get(name)
+        spec = self.screens().get(name)
         if spec is None:
             raise LookupError(f"screen '{name}' is not set up (run setup-screens.bat or edit bridge/data/screens.json)")
         dt = 1.0 / self.fps()

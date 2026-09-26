@@ -407,24 +407,43 @@ body.mode-night .dknob, body.mode-nvg .dknob { filter: brightness(0.5); }
    ====================================================================== */
 .g1k-root { position: absolute; inset: 0; padding: 6px max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
 .g1k {
-  height: 100%; display: grid; grid-template-columns: 200px 1fr 200px; grid-template-rows: 1fr 64px; gap: 8px;
+  height: 100%; display: grid; grid-template-columns: 200px 1fr 200px; gap: 8px;
   background: linear-gradient(#34373b, #232528); border: 2px solid #111; border-radius: 20px; padding: 10px;
   box-shadow: inset 0 1px 0 #50555b;
 }
-.g1k-side { grid-row: 1 / span 2; display: flex; flex-direction: column; justify-content: space-between; align-items: center; min-height: 0; gap: 4px; }
+.g1k-side { display: flex; flex-direction: column; justify-content: space-between; align-items: center; min-height: 0; gap: 4px; }
 .g1k-side .knob-title { font-size: 10px; letter-spacing: 1px; }
 .g1k-row { display: flex; align-items: center; gap: 8px; }
 .g1k-ap, .g1k-keys { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; width: 100%; }
 .btn.g1k-key { min-height: 38px; padding: 4px; font-size: 13px; border-radius: 7px; }
 .btn.g1k-key .btn-led { height: 3px; width: 40%; }
 .btn.g1k-key.swap { min-height: 44px; min-width: 76px; }
-.g1k-softkeys { grid-column: 2; grid-row: 2; display: grid; grid-template-columns: repeat(12, 1fr); gap: 5px; }
-.btn.g1k-key.soft { min-height: 0; height: 100%; font-size: 12px; color: var(--muted); }
-.g1k-screen {
-  grid-column: 2; grid-row: 1; min-height: 0; overflow: hidden; background: #000; border: 4px solid #0c0c0c; border-radius: 6px;
-  display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; font-family: var(--gauge-font);
+/* screen + softkeys: the glass keeps the picture's shape (4:3 like the real GDU, or the live pop-out's own) and
+   the softkey row is exactly as wide, so each key sits under its label at the bottom of the Garmin screen */
+.g1k-display {
+  --ar: 4 / 3; --sk: 58px;
+  --w: min(100cqw, calc((100cqh - var(--sk) - 34px) * var(--ar)));
+  container-type: size; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
 }
-.g1k-brand { font-size: 10px; letter-spacing: 3px; color: #555; text-align: center; }
+.g1k-brand { width: var(--w); display: flex; justify-content: space-between; font-size: 10px; line-height: 12px; letter-spacing: 3px; color: #7d848c; }
+.g1k-display.live .g1k-status { color: var(--green); }
+.g1k-glass {
+  position: relative; flex: none; width: var(--w); aspect-ratio: var(--ar); overflow: hidden;
+  background: #000; border-radius: 3px; box-shadow: 0 0 0 4px #0c0c0c;
+}
+.scr.g1k-live { position: absolute; inset: 0; z-index: 3; }
+.g1k-live .scr-img { object-fit: fill; }
+.g1k-softkeys { flex: none; width: var(--w); height: var(--sk); display: grid; grid-template-columns: repeat(12, 1fr); }
+.g1k-softkeys > .btn { margin: 0 3px; }
+.btn.g1k-key.soft { min-height: 0; min-width: 0; height: 100%; padding: 4px 0; font-size: 12px; color: var(--muted); }
+.g1k-screen { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; font-family: var(--gauge-font); }
+.g1k-sk-hint {
+  flex: none; display: flex; flex-direction: column; align-items: center; gap: 1px; padding-top: 4px;
+  border-top: 1px solid #2c2c2c; font-size: 11px; color: #9aa3ad; text-align: center;
+}
+.g1k-sk-hint span { font-size: 10px; color: #6b7480; }
+.g1k-sk-hint span:empty { display: none; }
 .g1k-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; }
 .g1k-modes { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
 .g1k-mode { font-size: 12px; font-weight: 700; padding: 2px 6px; border-radius: 3px; color: #333; border: 1px solid #222; }
@@ -448,6 +467,18 @@ body.mode-nvg .g1k-box-v { color: #b9ffcb; }
   .g1k { grid-template-columns: 170px 1fr 170px; }
   .g1k-mid, .g1k-bot { grid-template-columns: 120px 1fr 120px; }
   .dknob { width: 80px; }
+}
+@media (max-height: 860px) {  /* iPad landscape: keep the knob columns (FMS, ALT) on screen */
+  .g1k .dknob { width: 80px; }
+  .g1k .dknob-wrap.sm .dknob { width: 54px; }
+  .g1k .dknob-steps .step { height: 26px; }
+  .btn.g1k-key { min-height: 32px; }
+}
+@media (max-height: 780px) {  /* iPad mini / 9.7" landscape */
+  .g1k .dknob { width: 70px; }
+  .g1k .dknob-wrap.sm .dknob { width: 48px; }
+  .g1k .dknob-steps .step { height: 24px; }
+  .btn.g1k-key { min-height: 30px; }
 }
 
 /* ======================================================================

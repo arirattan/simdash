@@ -17,7 +17,8 @@ The bridge connects **directly to the sims**, so SimHub isn't needed:
     1200/7000, IDENT), ADF, and a KAP 140 autopilot.
   - **CONTROLS:** touch throttle / prop / mixture levers, trim wheel, flaps, fuel selector, magneto key (hold START)
     and switches.
-- **G1000** (MSFS): PFD and MFD bezels, including softkeys, FMS knobs and the GFC 700 keys.
+- **G1000** (MSFS): PFD and MFD bezels, including softkeys, FMS knobs and the GFC 700 keys. Pop the PFD / MFD out in
+  MSFS and the **real Garmin screen** shows in the bezel, with each softkey right under its label.
 - **Moving map** (MSFS & DCS):
   - Your aircraft and trail, with follow mode and range rings.
   - Streets / Topo / Satellite / Dark maps, plus an optional openAIP chart overlay (free API key).
@@ -93,9 +94,21 @@ Mapping: `bridge/msfs.json` (SimVar per gauge, sim event per button). Restart th
 It has softkeys 1–12, D→ / MENU / FPL / PROC / CLR / ENT, dual FMS / NAV / COM / ALT / BARO-CRS knobs, HDG (push = sync),
 RANGE (push = pan) and the GFC 700 autopilot keys. The keys fire the same sim events that MSFS's own G1000 cockpit
 template binds to each bezel control (e.g. `G1000_PFD_SOFTKEY3`, `G1000_MFD_ENTER_BUTTON`,
-`G1000_PFD_GROUP_KNOB_INC`), so no add-ons are needed. The screen area shows SimDash's own flight display; the Garmin
-screen itself stays in the sim. Drag a knob's outer ring or inner knob, tap its centre to push, or use ⟲ − + ⟳.
-FMS knob push has no sim event, so it presses the aircraft's input event instead (best effort).
+`G1000_PFD_GROUP_KNOB_INC`), so no add-ons are needed. Drag a knob's outer ring or inner knob, tap its centre to push,
+or use ⟲ − + ⟳. FMS knob push has no sim event, so it presses the aircraft's input event instead (best effort).
+
+*The real G1000 screen and softkey labels:* the softkeys only mean something with the Garmin screen above them, so the
+bridge streams the sim's own PFD / MFD into the bezel (Windows):
+1. In the cockpit, **Right-Alt + click the PFD**, then the MFD. MSFS opens each one in its own window ("pop-out").
+2. Keep both windows **visible on the PC screen**, the PFD left of (or above) the MFD. A second monitor or a corner of the
+   main screen works; the bridge copies them off the screen, so a pop-out hidden behind the sim window shows the sim.
+3. The G1000 page shows **● LIVE** and the picture fills the bezel. The softkey row is exactly as wide as the picture, so
+   each key sits under its label.
+
+The bridge finds the pop-outs by itself and counts them left to right: the 1st is the PFD, the 2nd the MFD. To pick
+them yourself (e.g. only the MFD popped out), set `G1000_PFD` / `G1000_MFD` in `bridge/data/screens.json`:
+`"G1000_MFD": {"popout": 1}` (1st pop-out), `{"window": "MFD"}` (window title, e.g. renamed by Pop Out Panel Manager),
+or desktop pixels. Without a pop-out the screen shows SimDash's own flight display.
 
 **Cockpit dashboard (MSFS):** when an aircraft loads, the bridge asks the sim for that aircraft's cockpit controls,
 the same ones you click in the 3D cockpit. They appear on the iPad grouped by system (LIGHTING, ELECTRICAL,
@@ -168,9 +181,11 @@ Which aircraft can export displays: most Eagle Dynamics modules use `LEFT_MFCD` 
 (both MPDs, and the TEDAC in the centre slot), F/A-18C, F-16C, A-10C and others. Heatblur's F-14 and F-4E don't support it.
 
 - **My panels** has a **Live screen** widget, so you can put any screen on your own pages at any size.
-- Any window or area of the PC screen can be added to `bridge/data/screens.json` by hand, e.g. an MSFS pop-out PFD / MFD:
-  `"PFD": {"label": "MSFS PFD", "window": "PFD"}` (a part of a window title) or `{"x": 1920, "y": 0, "w": 600, "h": 600}`
-  (desktop pixels).
+- MSFS pop-outs (Right-Alt + click an instrument) are found by themselves: the G1000 page uses the first two as
+  `G1000_PFD` / `G1000_MFD` (see section 2).
+- Any window or area of the PC screen can be added to `bridge/data/screens.json` by hand:
+  `"GNS530": {"label": "GNS 530", "popout": 3}` (the 3rd MSFS pop-out, counted left to right),
+  `{"window": "PFD"}` (a part of a window title) or `{"x": 1920, "y": 0, "w": 600, "h": 600}` (desktop pixels).
 - Pictures are PNG. **`pip install pillow`** switches them to JPEG, which is about 10x smaller and smoother over Wi-Fi.
   `"fps"` (default 8) and `"quality"` (default 70) in screens.json tune speed against Wi-Fi load.
 - Demo mode shows a fake FLIR picture on the TADS page so you can see how it looks.

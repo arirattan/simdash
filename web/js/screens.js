@@ -3,8 +3,9 @@
  * streamed by the bridge (bridge/src_screens.py, set up with setup-screens.bat).
  *
  *   Screens.View(['TEDAC', 'CENTER_MFCD'], { quiet: true })  -> widget {el, keys, update}
- *     names  screen names to try, first one the bridge has wins
- *     quiet  stay invisible (so whatever is underneath shows) until pictures arrive
+ *     names    screen names to try, first one the bridge has wins
+ *     quiet    stay invisible (so whatever is underneath shows) until pictures arrive
+ *     onstate  (live, message, width, height) when the picture comes or goes, or changes size
  */
 (function (global) {
   'use strict';
@@ -27,11 +28,16 @@
     const w = el('div', { class: 'scr' + (o.quiet ? ' quiet' : '') + (o.cls ? ' ' + o.cls : '') });
     const img = el('img', { class: 'scr-img', alt: '' }, w);
     const msg = el('div', { class: 'scr-msg' }, w);
-    let timer = null, prev = null, seen = false, stopped = false, fails = 0;
+    let timer = null, prev = null, seen = false, stopped = false, fails = 0, state = '';
 
     const later = (ms) => { clearTimeout(timer); timer = setTimeout(tick, ms); };
     function stop() { stopped = true; clearTimeout(timer); if (prev) URL.revokeObjectURL(prev); prev = null; }
-    function offline(text) { w.classList.remove('live'); msg.textContent = text; }
+    function report(live, text, iw = 0, ih = 0) {
+      const s = [live, text, iw, ih].join('|');
+      if (s !== state && o.onstate) o.onstate(live, text, iw, ih);
+      state = s;
+    }
+    function offline(text) { w.classList.remove('live'); msg.textContent = text; report(false, text); }
 
     async function tick() {
       if (stopped) return;
@@ -41,7 +47,7 @@
       const i = await list();
       const name = names.find((n) => i.screens.some((s) => s.name === n));
       if (!name) {
-        offline(i.error && !i.screens.length ? `LIVE SCREEN NOT SET UP\n${i.error}` : `LIVE SCREEN NOT SET UP\nno "${names[0]}" screen in bridge/data/screens.json`);
+        offline(i.error ? `LIVE SCREEN NOT SET UP\n${i.error}` : `LIVE SCREEN NOT SET UP\nno "${names[0]}" screen in bridge/data/screens.json`);
         return later(5000);
       }
       const t0 = performance.now();
@@ -54,6 +60,7 @@
         prev = url;
         fails = 0;
         w.classList.add('live');
+        report(true, '', img.naturalWidth, img.naturalHeight);
         later(Math.max(15, 1000 / (i.fps || 8) - (performance.now() - t0)));
       } catch (e) {
         offline('NO SIGNAL\n' + e.message);

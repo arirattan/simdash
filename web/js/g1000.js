@@ -8,7 +8,9 @@
  *   FMS knob        K:G1000_<X>_GROUP_KNOB_INC/DEC (small), PAGE_KNOB_INC/DEC (large)
  *   RANGE knob      K:G1000_<X>_ZOOMOUT_BUTTON / ZOOMIN_BUTTON, push CURSOR_BUTTON
  *   radios, HDG, ALT, CRS/BARO, autopilot: standard K: events
- * The screen area shows SimDash's own flight display (the Garmin screen itself stays in the sim).
+ * The screen shows the real Garmin screen when the PFD / MFD is popped out in MSFS (Right-Alt + click it):
+ * the bridge streams the pop-out window (bridge/src_screens.py, G1000_PFD / G1000_MFD). The softkeys are as
+ * wide as that picture, so each key sits right under its label. Otherwise SimDash's own flight display shows.
  */
 (function (global) {
   'use strict';
@@ -47,7 +49,7 @@
     return w.el;
   }
 
-  // ------------------------------------------------------------------ screen (SimDash flight display)
+  // ------------------------------------------------------------------ screen (SimDash flight display, under the live one)
   function pfdScreen(scr) {
     const top = el('div', { class: 'g1k-top' }, scr);
     top.appendChild(box('NAV1', (s) => `${freq(s.nav1_act, 2)}  ⇆  ${freq(s.nav1, 2)}`, ['nav1_act', 'nav1'], 'nav'));
@@ -132,10 +134,28 @@
       .forEach(([t, i, k]) => ap.appendChild(key(t, i, k)));
     left.appendChild(dual({ text: 'ALT  1000 / 100', outer: { inc: 'ALT_INC_1000', dec: 'ALT_DEC_1000' }, inner: { inc: 'K:AP_ALT_VAR_INC', dec: 'K:AP_ALT_VAR_DEC' } }));
 
-    // screen
-    const scr = el('div', { class: 'g1k-screen' }, b);
-    el('div', { class: 'g1k-brand', text: 'GARMIN · ' + U + ' · SimDash display' }, scr);
+    // screen: the real G1000 screen (MSFS pop-out) over SimDash's own display, softkeys right under it
+    const disp = el('div', { class: 'g1k-display' }, b);
+    const brand = el('div', { class: 'g1k-brand' }, disp);
+    el('span', { text: 'GARMIN' }, brand);
+    const status = el('span', { class: 'g1k-status', text: 'SimDash display' }, brand);
+    const glass = el('div', { class: 'g1k-glass' }, disp);
+    const scr = el('div', { class: 'g1k-screen' }, glass);
     (U === 'PFD' ? pfdScreen : mfdScreen)(scr);
+    const hint = el('div', { class: 'g1k-sk-hint' }, scr);
+    el('b', { text: `Softkey labels come from the real ${U}: in MSFS, Right-Alt + click the ${U} screen to pop it out` }, hint);
+    const why = el('span', {}, hint);
+    glass.appendChild(reg(global.Screens.View(['G1000_' + U], {
+      quiet: true, cls: 'g1k-live',
+      onstate(on, text, w, h) {
+        disp.classList.toggle('live', on);
+        disp.style.setProperty('--ar', on && w && h ? String(w / h) : '4 / 3');
+        status.textContent = on ? '● LIVE' : 'SimDash display';
+        why.textContent = on ? '' : text.replace(/\n/g, ' · ');
+      }
+    })).el);
+    const sk = el('div', { class: 'g1k-softkeys' }, disp);
+    for (let i = 1; i <= 12; i++) sk.appendChild(key(String(i), K('SOFTKEY' + i), null, 'soft'));
 
     // right side: COM, CRS/BARO, RANGE, keys, FMS
     const right = el('div', { class: 'g1k-side' }, b);
@@ -149,10 +169,6 @@
     [['D→', 'DIRECTTO_BUTTON'], ['MENU', 'MENU_BUTTON'], ['FPL', 'FLIGHTPLAN_BUTTON'], ['PROC', 'PROCEDURE_BUTTON'], ['CLR', 'CLEAR_BUTTON'], ['ENT', 'ENTER_BUTTON']]
       .forEach(([t, e]) => keys.appendChild(key(t, K(e))));
     right.appendChild(dual({ text: 'FMS', outer: { inc: K('PAGE_KNOB_INC'), dec: K('PAGE_KNOB_DEC') }, inner: { inc: K('GROUP_KNOB_INC'), dec: K('GROUP_KNOB_DEC') }, push: '@AS1000_' + U + '_1_FMS_Inner_Button', pushLabel: 'CRSR' }));
-
-    // softkeys under the screen
-    const sk = el('div', { class: 'g1k-softkeys' }, b);
-    for (let i = 1; i <= 12; i++) sk.appendChild(key(String(i), K('SOFTKEY' + i), null, 'soft'));
 
     // night lighting tint on the instruments inside the screen
     b.querySelectorAll('.instrument').forEach((i) => i.appendChild(Object.assign(document.createElement('div'), { className: 'night-tint' })));
