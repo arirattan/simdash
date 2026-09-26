@@ -6,6 +6,11 @@ Every SimVar gets its own data definition + request, so one bad SimVar name
 only disables itself instead of shifting everything after it.
 
 Mapping lives in msfs.json (canonical dashboard key -> SimVar, input name -> K: event).
+
+Cockpit panel: MSFS 2020 (SU13+) / 2024 "input events" list every clickable control of the
+loaded aircraft (switches, buttons, knobs - the same ones you click in the 3D cockpit).
+They are enumerated when the aircraft changes, their values subscribed, and they are shown
+on the iPad "Cockpit" dashboard exactly like DCS-BIOS controls.
 """
 import asyncio
 import ctypes
@@ -13,6 +18,7 @@ import ctypes.wintypes as wt
 import glob
 import json
 import os
+import re
 import string
 import struct
 import time
@@ -22,6 +28,9 @@ HERE = Path(__file__).resolve().parent
 
 # SimConnect constants
 RECV_EXCEPTION, RECV_OPEN, RECV_QUIT, RECV_SIMOBJECT_DATA = 1, 2, 3, 8
+RECV_ENUMERATE_INPUT_EVENTS, RECV_GET_INPUT_EVENT, RECV_SUBSCRIBE_INPUT_EVENT = 34, 35, 36
+IE_DESCRIPTOR_SIZE = 76          # char Name[64] + UINT64 Hash + DWORD eType, pack(1)
+IE_ENUM_REQ, IE_GET_REQ_BASE = 50000, 60000
 PERIOD_VISUAL_FRAME, PERIOD_SECOND = 2, 4
 FLAG_CHANGED = 1
 DT_FLOAT64, DT_STRING256 = 4, 9
@@ -62,11 +71,38 @@ def load_dll(path):
         "SimConnect_MapClientEventToSimEvent": [H, DW, ctypes.c_char_p],
         "SimConnect_TransmitClientEvent": [H, DW, DW, DW, DW, ctypes.c_int],
         "SimConnect_GetLastSentPacketID": [H, ctypes.POINTER(DW)],
+        # input events (MSFS 2020 SU13+ / 2024) - optional
+        "SimConnect_EnumerateInputEvents": [H, DW],
+        "SimConnect_GetInputEvent": [H, DW, ctypes.c_uint64],
+        "SimConnect_SetInputEvent": [H, ctypes.c_uint64, DW, ctypes.c_void_p],
+        "SimConnect_SubscribeInputEvent": [H, ctypes.c_uint64],
     }
     for name, args in sig.items():
-        f = getattr(d, name)
+        f = getattr(d, name, None)
+        if f is None:
+            continue
         f.argtypes, f.restype = args, HR
     return d
+
+
+PUSH_RE = re.compile(r"push|button|btn|softkey|press|ident|swap|test|_clr|_ent\b|menu|directto|_fpl|_proc", re.I)
+ANALOG_RE = re.compile(r"knob|dial|wheel|volume|vol_|bright|dimmer|pot|trim|heading|course|obs|baro|freq|range|axis|lever|throttle|mixture|propeller|condition|collective|cyclic|pedal", re.I)
+
+
+def pretty(name):
+    return re.sub(r"_+", " ", name).strip()
+
+
+def classify(name, value):
+    """Turn an input event into a control description for the iPad (same format as DCS-BIOS controls)."""
+    e = {"id": name, "d": pretty(name)}
+    if PUSH_RE.search(name):
+        e.update(t="selector", v="momentary_last_position", i=[["s", 1]], max=1)
+    elif value in (0, 1) and not ANALOG_RE.search(name):
+        e.update(t="selector", p=["OFF", "ON"], i=[["s", 1], ["f"], ["a", "TOGGLE"]], max=1)
+    else:
+        e.update(t="fixed_step_dial", i=[["f"], ["s", 100]], max=100)
+    return e
 
 
 class MsfsSource:
@@ -87,6 +123,13 @@ class MsfsSource:
         self.sent = {}        # packet id -> description (for exception messages)
         self.events = {}      # sim event name -> client event id
         self.hidden = {}      # values used only for derived keys
+        self.ie = {}          # input event name -> [hash, type]
+        self.ie_by_hash = {}  # hash -> name
+        self.ie_vals = {}     # name -> value
+        self.ie_get = {}      # request id -> name
+        self.ie_pending = 0   # outstanding initial GetInputEvent answers
+        self.ie_ready_at = 0
+        self.panel = None     # cockpit control list for the iPad
 
     @property
     def live(self):
@@ -138,6 +181,7 @@ class MsfsSource:
                 pass
         self.h, self.connected, self.title = None, False, ""
         self.events.clear()
+        self.ie, self.ie_by_hash, self.ie_vals, self.panel = {}, {}, {}, None
         self.b.source_changed()
         self.log("MSFS: disconnected")
 
@@ -181,6 +225,7 @@ class MsfsSource:
                     if t != self.title:
                         self.title = t
                         self.log(f"MSFS: aircraft '{t}'")
+                        self.enumerate_input_events()
                         self.b.source_changed()
                     continue
                 key = self.req_key.get(req)
@@ -194,11 +239,29 @@ class MsfsSource:
             elif rid == RECV_EXCEPTION:
                 exc, send_id, index = struct.unpack_from("<III", raw, 12)
                 self.log(f"MSFS: SimConnect exception {EXCEPTIONS.get(exc, exc)} for {self.sent.get(send_id, 'packet %d' % send_id)}")
+            elif rid == RECV_ENUMERATE_INPUT_EVENTS:
+                self.on_ie_list(raw)
+            elif rid == RECV_GET_INPUT_EVENT:
+                req, etype = struct.unpack_from("<II", raw, 12)
+                name = self.ie_get.pop(req, None)
+                if name and etype == 0:
+                    self.ie_vals[name] = struct.unpack_from("<d", raw, 20)[0]
+                    self.ie_pending -= 1
+            elif rid == RECV_SUBSCRIBE_INPUT_EVENT:
+                h, etype = struct.unpack_from("<QI", raw, 12)
+                name = self.ie_by_hash.get(h)
+                if name and etype == 0:
+                    v = struct.unpack_from("<d", raw, 24)[0]
+                    self.ie_vals[name] = v
+                    if self.panel:
+                        self.b.push_bios({name: round(v, 4)})
             elif rid == RECV_QUIT:
                 self.log("MSFS: simulator closed")
                 return False
         if out:
             self.b.push(self.derive(out), self)
+        if self.ie and not self.panel and (self.ie_pending <= 0 or time.time() > self.ie_ready_at):
+            self.build_panel()
         # no title heartbeat for 20 s -> assume the sim crashed/closed
         return time.time() - self.last_msg < 20
 
@@ -213,11 +276,84 @@ class MsfsSource:
             out["fuel"] = self.hidden["_fuel_qty"] / cap * 100
         return {k: round(v, 3) for k, v in out.items()}
 
+    # ---------------------------------------------------------------- input events (cockpit panel)
+    def enumerate_input_events(self):
+        self.ie, self.ie_by_hash, self.ie_vals, self.panel = {}, {}, {}, None
+        self.ie_ready_at = time.time() + 5
+        if self.h and hasattr(self.dll, "SimConnect_EnumerateInputEvents"):
+            self.dll.SimConnect_EnumerateInputEvents(self.h, IE_ENUM_REQ)
+
+    def on_ie_list(self, raw):
+        req, count, entry, out_of = struct.unpack_from("<4I", raw, 12)
+        for i in range(count):
+            o = 28 + i * IE_DESCRIPTOR_SIZE
+            if o + IE_DESCRIPTOR_SIZE > len(raw):
+                break
+            name = raw[o:o + 64].split(b"\0")[0].decode("utf-8", "replace")
+            h, etype = struct.unpack_from("<QI", raw, o + 64)
+            if name:
+                self.ie[name] = [h, etype]
+                self.ie_by_hash[h] = name
+        if entry + 1 >= out_of:  # last packet: read current values and subscribe to changes
+            self.ie_get, self.ie_pending = {}, 0
+            for n, name in enumerate(self.ie):
+                h, etype = self.ie[name]
+                if etype != 0:  # string input events are rare; skip them
+                    continue
+                req_id = IE_GET_REQ_BASE + n
+                self.ie_get[req_id] = name
+                self.ie_pending += 1
+                self.dll.SimConnect_GetInputEvent(self.h, req_id, h)
+                self.dll.SimConnect_SubscribeInputEvent(self.h, h)
+            self.ie_ready_at = time.time() + 2
+
+    def build_panel(self):
+        cats = {}
+        for name in sorted(self.ie):
+            if self.ie[name][1] != 0:
+                continue
+            cat = name.split("_", 1)[0].upper() if "_" in name else "OTHER"
+            cats.setdefault(cat, []).append(classify(name, self.ie_vals.get(name)))
+        self.panel = {"aircraft": self.title, "categories": [{"name": c, "module": "MSFS", "controls": v} for c, v in sorted(cats.items())]}
+        self.log(f"MSFS: cockpit panel for '{self.title}' - {sum(len(v) for v in cats.values())} controls")
+        self.b.push_bios({k: round(v, 4) for k, v in self.ie_vals.items()})
+        self.b.source_changed()
+
+    async def bios_input(self, name, arg):
+        """Set an input event from the iPad cockpit panel. arg: number, TOGGLE, INC, DEC, +n, -n."""
+        if name not in self.ie or not self.h:
+            return False
+        h = self.ie[name][0]
+        cur = self.ie_vals.get(name, 0.0)
+        if arg == "TOGGLE":
+            v = 0.0 if cur else 1.0
+        elif arg in ("INC", "DEC"):
+            step = 1.0 if (abs(cur) >= 2 or cur == int(cur)) else 0.05
+            v = cur + (step if arg == "INC" else -step)
+        elif arg[:1] in "+-" and len(arg) > 1:
+            v = cur + float(arg)
+        else:
+            try:
+                v = float(arg)
+            except ValueError:
+                return False
+        val = ctypes.c_double(v)
+        self.dll.SimConnect_SetInputEvent(self.h, h, 8, ctypes.byref(val))
+        self._track(f"input event '{name}' = {v}")
+        return True
+
     # ---------------------------------------------------------------- send
     async def input(self, name, action):
         spec = self.cfg["events"].get(name)
         if spec is None or not self.connected:
             return False
+        head = spec if isinstance(spec, str) else str(spec[0])
+        if head.startswith("@"):
+            # "@INPUT_EVENT_NAME" or ["@INPUT_EVENT_NAME", value]: drive a cockpit input event directly
+            if action != "release":
+                value = 1 if isinstance(spec, str) else spec[1]
+                await self.bios_input(head[1:], str(value))
+            return True
         if action == "release":  # K: events are one-shot, fired on press
             return True
         event, value = (spec, 0) if isinstance(spec, str) else (spec[0], spec[1])

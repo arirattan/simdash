@@ -3,6 +3,7 @@
     "MSFS direct connection (SimConnect). Restart the bridge after editing this file.",
     "vars:   dashboard key -> [SimVar name, units, optional scale]. Keys starting with _ are helpers for computed values.",
     "events: dashboard input name -> K: event name, or [event, value]. \"$key\" as value = current value of that dashboard key.",
+    "        \"@NAME\" (or [\"@NAME\", value]) drives a cockpit input event of the loaded aircraft - names are shown on the iPad Cockpit page.",
     "SimVar and event reference: https://docs.flightsimulator.com/html/Programming_Tools/SimVars/Simulation_Variables.htm",
     "If the attitude indicator banks or pitches the wrong way, flip the sign of the scale (1 <-> -1).",
     "simconnect_dll: optional full path to SimConnect.dll if the bridge can't find one."

@@ -1,10 +1,11 @@
 /*
- * "DCS cockpit" dashboard: builds touch panels for EVERY DCS-BIOS control of the
- * aircraft you are sitting in (F-14, F-4E, AH-64D, ... any module DCS-BIOS supports).
+ * "Cockpit" dashboard: builds touch panels for EVERY cockpit control of the aircraft
+ * you are sitting in.
+ *   DCS  : from DCS-BIOS (F-14, F-4E, AH-64D, ... any module DCS-BIOS supports)
+ *   MSFS : from the sim's input events (every clickable switch/button/knob of the loaded aircraft)
  *
- * The bridge serves the control list at /bios/panel.json (compacted from DCS-BIOS's
- * doc/json files). Values arrive as Link.state["bios:<IDENTIFIER>"]; touches are sent
- * with Link.biosCmd(identifier, argument).
+ * The bridge serves the control list at /bios/panel.json. Values arrive as
+ * Link.state["bios:<IDENTIFIER>"]; touches are sent with Link.biosCmd(identifier, argument).
  */
 (function (global) {
   'use strict';
@@ -74,7 +75,7 @@
         if (x === undefined) { v.textContent = '--'; return; }
         if (c.p && c.p[x] !== undefined) v.textContent = c.p[x];
         else if (c.max > 100) v.textContent = Math.round(x / c.max * 100) + '%';
-        else v.textContent = x;
+        else v.textContent = Number.isInteger(x) ? x : (+x).toFixed(2);
       }
     };
   }
@@ -184,7 +185,7 @@
       clearLive();
       body.innerHTML = '';
       title.textContent = '';
-      el('div', { class: 'bc-empty', html: 'No DCS-BIOS aircraft yet.<br><br>Start a DCS mission with DCS-BIOS installed — this page fills itself with every switch, button, knob, lamp and display of that aircraft.' }, body);
+      el('div', { class: 'bc-empty', html: 'No aircraft yet.<br><br><b>MSFS 2024:</b> load a flight — this page fills itself with every clickable control of that aircraft.<br><b>DCS:</b> start a mission with DCS-BIOS installed — every switch, button, knob, lamp and display appears here.' }, body);
       return;
     }
     const cats = panel.categories.map((cat, i) => ({ cat, i, n: seatFilter(cat.controls).length })).filter((x) => x.n);
@@ -266,7 +267,7 @@
   }
 
   global.DASHBOARDS['dcs-cockpit'] = {
-    name: 'DCS cockpit', icon: '🎛', sub: 'every switch of your current DCS aircraft (DCS-BIOS)',
+    name: 'Cockpit', icon: '🎛', sub: 'every switch of the aircraft you are flying (MSFS & DCS)',
     custom: { mount, unmount }
   };
 })(window);

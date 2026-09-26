@@ -108,6 +108,7 @@ class Bridge:
         self.status_dirty = True
         self.sources = []
         self.dcs = None
+        self.msfs = None
 
     # ---------- called by sources ----------
     def push(self, values, src=None):
@@ -126,6 +127,12 @@ class Bridge:
 
     def source_changed(self):
         self.status_dirty = True
+
+    def cockpit(self):
+        """Source whose cockpit-control panel (DCS-BIOS / MSFS input events) the iPad should show."""
+        cands = [s for s in (self.dcs, self.msfs) if s and getattr(s, "panel", None)]
+        live = [s for s in cands if s.live]
+        return (live or cands or [None])[0]
 
     def active(self):
         for s in self.sources:
@@ -150,8 +157,9 @@ class Bridge:
     async def bios_input(self, ident, arg):
         if self.args.verbose:
             log(f"DCS-BIOS {ident} {arg}")
-        if self.dcs:
-            await self.dcs.bios_input(ident, arg)
+        c = self.cockpit()
+        if c:
+            await c.bios_input(ident, arg)
 
     # ---------- publish ----------
     async def publish_loop(self):
@@ -183,7 +191,7 @@ class Bridge:
             "t": "status", "demo": self.args.demo,
             "sim": "DEMO" if self.args.demo else (a.label if a else ""),
             "aircraft": "" if self.args.demo else (a.status().get("aircraft", "") if a else ""),
-            "bios": "DEMO" if self.args.demo else (self.dcs.panel["aircraft"] if self.dcs and self.dcs.panel else ""),
+            "bios": "DEMO" if self.args.demo else (self.cockpit().panel["aircraft"] if self.cockpit() else ""),
             "sources": {s.name: s.status() for s in self.sources},
         }
 
@@ -262,7 +270,8 @@ class Bridge:
 
         path = target.split("?", 1)[0]
         if path == "/bios/panel.json":
-            panel = self.dcs.panel if self.dcs and self.dcs.panel else None
+            c = self.cockpit()
+            panel = c.panel if c else None
             if self.args.demo and not panel:
                 panel = demo_panel()
             body = json.dumps(panel or {"aircraft": "", "categories": []}, separators=(",", ":")).encode()
@@ -407,7 +416,8 @@ async def main():
         wanted = [s.strip().lower() for s in args.source.split(",") if s.strip()]
         if "msfs" in wanted:
             from src_msfs import MsfsSource
-            b.sources.append(MsfsSource(b, log))
+            b.msfs = MsfsSource(b, log)
+            b.sources.append(b.msfs)
         if "dcs" in wanted:
             from src_dcs import DcsSource
             b.dcs = DcsSource(b, log)

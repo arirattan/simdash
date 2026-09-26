@@ -12,8 +12,10 @@ The bridge connects **directly to the sims**, so SimHub isn't needed:
 
 **Dashboards**
 - **Civil aircraft · Civil helicopter · Military jet · Military helicopter:** instrument panels with touch controls.
-- **DCS cockpit:** builds a touch panel for *every* switch, button, knob, lamp and display of the DCS aircraft
-  you're flying. It works for any aircraft DCS-BIOS supports (F-14, F-4E, AH-64D, …) and needs no setup.
+- **Cockpit:** builds a touch panel for *every* control of the aircraft you're flying, read live from the sim:
+  - **MSFS 2024/2020:** every clickable switch, button and knob of the loaded aircraft, from the sim's own
+    "input events" (C172, C152, Caravan, Cabri G2, H125, add-ons…).
+  - **DCS:** every switch, button, knob, lamp and display from DCS-BIOS (F-14, F-4E, AH-64D, …).
 
 ## 1. Try it now (no sim needed)
 1. Install Python 3 if you don't have it.
@@ -27,6 +29,14 @@ Nothing to install. Double-click **`start-bridge.bat`** and fly. The bridge find
 checks SimHub's folder, the MSFS SDK and MobiFlight. Gauges read SimVars, and buttons fire sim events directly,
 so there are no key bindings to set up.
 Mapping: `bridge/msfs.json` (SimVar per gauge, sim event per button). Restart the bridge after editing it.
+
+**Cockpit dashboard (MSFS):** when an aircraft loads, the bridge asks the sim for that aircraft's cockpit controls,
+the same ones you click in the 3D cockpit. They appear on the iPad grouped by system (LIGHTING, ELECTRICAL,
+AUTOPILOT…). Buttons press, switches flip and knobs step, and they stay in sync with the cockpit.
+The aircraft files themselves are encrypted, so nothing is copied out of MSFS; everything comes from the running
+sim through SimConnect.
+Tip: once you know a control's name from that page, a generic dashboard button can drive it directly. Map it in
+`msfs.json` as `"AP_MASTER": "@AUTOPILOT_KAP140_Push_AP"` (the `@` means "cockpit input event").
 
 ## 3. DCS World
 1. **Flight data:** double-click **`install-dcs.bat`** once. It copies `SimDash.lua` into
