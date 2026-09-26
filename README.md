@@ -99,9 +99,13 @@ or use ⟲ − + ⟳. FMS knob push has no sim event, so it presses the aircraft
 
 *The real G1000 screen and softkey labels:* the softkeys only mean something with the Garmin screen above them, so the
 bridge streams the sim's own PFD / MFD into the bezel (Windows):
-1. In the cockpit, **Right-Alt + click the PFD**, then the MFD. MSFS opens each one in its own window ("pop-out").
-2. Keep both windows **visible on the PC screen**, the PFD left of (or above) the MFD. A second monitor or a corner of the
-   main screen works; the bridge copies them off the screen, so a pop-out hidden behind the sim window shows the sim.
+1. Once: double-click **`install-screen-capture.bat`** (installs `windows-capture`), so the pop-outs don't have to stay
+   visible on the PC. Restart the bridge.
+2. In the cockpit, **Right-Alt + click the PFD**, then the MFD. MSFS opens each one in its own window ("pop-out").
+   Put the PFD left of (or above) the MFD, then click back into the sim: the pop-outs can sit **behind the sim window**
+   or be **minimised**, and the iPad still shows them (Windows Graphics Capture).
+   Without step 1 the bridge copies them off the screen, so they must stay visible (a second monitor or a corner of
+   the main screen); a covered pop-out would show whatever covers it.
 3. The G1000 page shows **● LIVE** and the picture fills the bezel. The softkey row is exactly as wide as the picture, so
    each key sits under its label.
 
@@ -109,7 +113,8 @@ If it says **NO SIGNAL**, the amber line under it says why, and the bridge windo
 (`Screens: MSFS pop-outs, left to right: #1 1024x768 …`) or the MSFS windows it can see. "0 open" means no pop-out
 window exists yet: in the 3D cockpit, hold **Right-Alt** (the Alt key right of the space bar) and left-click on the PFD
 screen itself. A separate window with only the PFD appears; it can open small or behind the sim, so look for it.
-Very large pop-outs are scaled down for Wi-Fi.
+Very large pop-outs are scaled down for Wi-Fi. If Windows Graphics Capture can't capture a window, the bridge window
+says so and falls back to copying it off the screen.
 
 The bridge finds the pop-outs by itself and counts them left to right: the 1st is the PFD, the 2nd the MFD. To pick
 them yourself (e.g. only the MFD popped out), set `G1000_PFD` / `G1000_MFD` in `bridge/data/screens.json`:
@@ -192,7 +197,8 @@ Which aircraft can export displays: most Eagle Dynamics modules use `LEFT_MFCD` 
 - Any window or area of the PC screen can be added to `bridge/data/screens.json` by hand:
   `"GNS530": {"label": "GNS 530", "popout": 3}` (the 3rd MSFS pop-out, counted left to right),
   `{"window": "PFD"}` (a part of a window title) or `{"x": 1920, "y": 0, "w": 600, "h": 600}` (desktop pixels).
-- Pictures are PNG. **`pip install pillow`** switches them to JPEG, which is about 10x smaller and smoother over Wi-Fi.
+- Pictures are PNG. **`pip install pillow`** (or `install-screen-capture.bat`) switches them to JPEG, which is about
+  10x smaller and smoother over Wi-Fi.
   `"fps"` (default 8) and `"quality"` (default 70) in screens.json tune speed against Wi-Fi load.
 - Demo mode shows a fake FLIR picture on the TADS page so you can see how it looks.
 
@@ -227,6 +233,7 @@ start-bridge.bat          MSFS + DCS (direct)
 start-demo.bat            fake data, try the iPad side
 install-dcs.bat           installs SimDash.lua into DCS (--uninstall to remove)
 setup-screens.bat         DCS display export for live screens (FLIR, radar, MFDs)
+install-screen-capture.bat  lets MSFS pop-outs stay hidden while the iPad shows them (windows-capture)
 start-bridge-simhub.bat   optional SimHub mode
 bridge/bridge.py          HTTP + WebSocket server, routes data and touches
 bridge/src_msfs.py        SimConnect (ctypes, no pip packages)      + msfs.json

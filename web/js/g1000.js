@@ -151,6 +151,7 @@
         disp.classList.toggle('live', on);
         disp.style.setProperty('--ar', on && w && h ? String(w / h) : '4 / 3');
         status.textContent = on ? '● LIVE' : 'SimDash display';
+        if (on) global.Screens.list().then((i) => { if (!i.hidden) status.textContent = '● LIVE · run install-screen-capture.bat to hide the pop-out'; });
         why.textContent = on ? '' : text.replace(/\n/g, ' · ');
       }
     })).el);
