@@ -70,6 +70,8 @@ def load_dll(path):
         "SimConnect_GetNextDispatch": [H, ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(DW)],
         "SimConnect_MapClientEventToSimEvent": [H, DW, ctypes.c_char_p],
         "SimConnect_TransmitClientEvent": [H, DW, DW, DW, DW, ctypes.c_int],
+        # (hSimConnect, ObjectID, EventID, GroupID, Flags, dwData0..dwData4) - multi-parameter events
+        "SimConnect_TransmitClientEvent_EX1": [H, DW, DW, DW, ctypes.c_int, DW, DW, DW, DW, DW],
         "SimConnect_GetLastSentPacketID": [H, ctypes.POINTER(DW)],
         # input events (MSFS 2020 SU13+ / 2024) - optional
         "SimConnect_EnumerateInputEvents": [H, DW],
@@ -373,10 +375,11 @@ class MsfsSource:
                 await self.bios_input(name[1:], "1")
             return True
         if name.startswith("K:"):
-            # direct sim event from a panel, e.g. "K:G1000_PFD_SOFTKEY1" (fired on press)
-            spec = name[2:]
-            if not re.match(r"^[A-Z0-9_]+$", spec) or not self.connected:
+            # direct sim event from a panel: "K:G1000_PFD_SOFTKEY1", "K:THROTTLE_SET=8192", "K:SOME_EVENT=16384,1"
+            m = re.match(r"^([A-Z0-9_]+)(?:=(-?\d+(?:,-?\d+){0,4}))?$", name[2:])
+            if not m or not self.connected:
                 return False
+            spec = [m.group(1)] + [int(x) for x in m.group(2).split(",")] if m.group(2) else m.group(1)
         else:
             spec = self.cfg["events"].get(name)
         if spec is None or not self.connected:
@@ -390,15 +393,22 @@ class MsfsSource:
             return True
         if action == "release":  # K: events are one-shot, fired on press
             return True
-        event, value = (spec, 0) if isinstance(spec, str) else (spec[0], self.value_of(spec[1]))
+        if isinstance(spec, str):
+            event, values = spec, [0]
+        else:
+            event, values = spec[0], [self.value_of(v) for v in spec[1:]] or [0]
         eid = self.events.get(event)
         if eid is None:
             eid = len(self.events) + 1
             self.dll.SimConnect_MapClientEventToSimEvent(self.h, eid, event.encode())
             self._track(f"event '{event}' ({name})")
             self.events[event] = eid
-        data = int(round(value)) & 0xFFFFFFFF
-        hr = self.dll.SimConnect_TransmitClientEvent(self.h, USER_OBJECT, eid, data, GROUP_PRIORITY_HIGHEST, EVENT_FLAG_GROUPID_IS_PRIORITY)
+        data = [int(round(float(v))) & 0xFFFFFFFF for v in values]
+        if len(data) > 1 and hasattr(self.dll, "SimConnect_TransmitClientEvent_EX1"):
+            data += [0] * (5 - len(data))
+            hr = self.dll.SimConnect_TransmitClientEvent_EX1(self.h, USER_OBJECT, eid, GROUP_PRIORITY_HIGHEST, EVENT_FLAG_GROUPID_IS_PRIORITY, *data[:5])
+        else:
+            hr = self.dll.SimConnect_TransmitClientEvent(self.h, USER_OBJECT, eid, data[0], GROUP_PRIORITY_HIGHEST, EVENT_FLAG_GROUPID_IS_PRIORITY)
         if hr != 0:
             self.log(f"MSFS: failed to send {event}")
         return True

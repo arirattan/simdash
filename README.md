@@ -11,7 +11,34 @@ The bridge connects **directly to the sims**, so SimHub isn't needed:
 ```
 
 **Dashboards**
+- **Prop & Cessna** (MSFS):
+  - **PANEL:** six-pack, VOR/CDI with glideslope, ADF, tach and engine bars.
+  - **RADIOS:** COM1/NAV1/COM2/NAV2 (tap a standby frequency to type it on a keypad), transponder (type a squawk,
+    1200/7000, IDENT), ADF, and a KAP 140 autopilot.
+  - **CONTROLS:** touch throttle / prop / mixture levers, trim wheel, flaps, fuel selector, magneto key (hold START)
+    and switches.
+- **G1000** (MSFS): PFD and MFD bezels, including softkeys, FMS knobs and the GFC 700 keys.
+- **Moving map** (MSFS & DCS):
+  - Your aircraft and trail, with follow mode and range rings.
+  - Streets / Topo / Satellite / Dark maps, plus an optional openAIP chart overlay (free API key).
+  - **Long-press anywhere for Direct-To** (bearing, distance, ETE).
+  - Airports with runways, frequencies and METAR, a NEAREST list, and your SimBrief route.
+    Airports need the free OurAirports database; the map offers to download it once (about 15 MB, into `bridge/data/`).
+- **Flight bag** (the in-flight iPad):
+  - Checklists: C152/172, C172 G1000, Cub/Beaver, Caravan/PC-6, AT-802, CL-415/Air Crane, turbine and piston
+    helicopters, and rescue/HEMS.
+  - A finger / Apple Pencil scratchpad with CRAFT / ATIS / taxi templates.
+  - Timers: auto flight time, stopwatch, countdowns with alarm, and a fuel-tank reminder.
+  - METAR/TAF weather, with a nearest-stations button.
+  - An E6B (wind triangle, runway crosswind, density altitude, fuel, descent, conversions). Values fill in from the sim.
+  - SimBrief OFP and navlog.
+- **Ag & Fire** (MSFS 2024 liquid-dropping system):
+  - Hopper/tank level.
+  - Hold-to-drop / spray, door open/close, and scoop down/up for the AT-802, CL-415 and Air Crane.
+  - Radar altimeter, levers and turboprop gauges (torque, ITT, Ng, prop RPM).
+  - If the drop door doesn't react, swap the two numbers of `DROP_OPEN` / `DROP_CLOSE` in `bridge/msfs.json`.
 - **Civil aircraft · Civil helicopter · Military jet · Military helicopter:** instrument panels with touch controls.
+- **AH-64D Apache** (DCS): MPDs, EUFD + keyboard, and fire / arm / CMWS panels.
 - **Cockpit:** builds a touch panel for *every* control of the aircraft you're flying, read live from the sim:
   - **MSFS 2024/2020:** every clickable switch, button and knob of the loaded aircraft, from the sim's own
     "input events" (C172, C152, Caravan, Cabri G2, H125, add-ons…).

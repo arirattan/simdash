@@ -29,7 +29,7 @@
       fromSim.add(k);
       pending.add(k);
     }
-    if (!raf) raf = requestAnimationFrame(flush);
+    if (!raf) raf = document.hidden ? setTimeout(flush, 60) : requestAnimationFrame(flush);
   }
 
   function flush() {

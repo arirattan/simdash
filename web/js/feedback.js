@@ -134,5 +134,23 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
 
-  global.Feedback = { play, init, settings: S };
+  // three beeps for timers (plays even when click sounds are off)
+  function alarm() {
+    init();
+    if (navigator.vibrate) { try { navigator.vibrate([200, 100, 200, 100, 200]); } catch (e) { /* ignore */ } }
+    if (!ctx) return;
+    const t0 = ctx.currentTime + 0.02;
+    for (let i = 0; i < 3; i++) {
+      const o = ctx.createOscillator(), g = ctx.createGain(), t = t0 + i * 0.35;
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.6, t + 0.01);
+      g.gain.setValueAtTime(0.6, t + 0.18);
+      g.gain.linearRampToValueAtTime(0, t + 0.22);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + 0.25);
+    }
+  }
+
+  global.Feedback = { play, init, alarm, settings: S };
 })(window);

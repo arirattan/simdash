@@ -10,7 +10,9 @@
 
   // ---------- home ----------
   const list = $('#dash-list');
-  Object.entries(D).forEach(([id, d]) => {
+  const ORDER = ['prop', 'g1000', 'map', 'efb', 'civil-heli', 'agfire', 'civil-plane', 'dcs-cockpit', 'apache', 'mil-jet', 'mil-heli'];
+  const ids = ORDER.filter((k) => D[k]).concat(Object.keys(D).filter((k) => !ORDER.includes(k)));
+  ids.map((id) => [id, D[id]]).forEach(([id, d]) => {
     const b = document.createElement('button');
     b.className = 'dash-card';
     b.innerHTML = `<span class="dash-icon">${d.icon}</span><span class="dash-name">${d.name}</span><span class="dash-pages">${d.sub || d.pages.map((p) => p.title).join(' · ')}</span>`;

@@ -36,6 +36,18 @@ function SimDash.collect()
 	local hdg = LoGetMagneticYaw and LoGetMagneticYaw() or (me and me.Heading)
 	if hdg then put("heading", (hdg * R2D) % 360) end
 
+	-- position for the moving map
+	if me and me.LatLongAlt then
+		put("lat", me.LatLongAlt.Lat)
+		put("lon", me.LatLongAlt.Long)
+	end
+	if me and me.Heading then put("hdg_true", (me.Heading * R2D) % 360) end
+	local vel = LoGetVectorVelocity and LoGetVectorVelocity() or nil -- world axes: x north, y up, z east (m/s)
+	if vel then
+		put("gs", math.sqrt(vel.x * vel.x + vel.z * vel.z) * 1.943844)
+		put("track", (math.atan2(vel.z, vel.x) * R2D) % 360)
+	end
+
 	local ias = LoGetIndicatedAirSpeed(); if ias then put("ias", ias * 1.943844) end
 	local asl = LoGetAltitudeAboveSeaLevel(); if asl then put("alt", asl * 3.28084) end
 	local agl = LoGetAltitudeAboveGroundLevel(); if agl then put("radalt", agl * 3.28084) end

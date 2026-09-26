@@ -109,6 +109,8 @@ class Bridge:
         self.sources = []
         self.dcs = None
         self.msfs = None
+        from src_api import Api
+        self.api = Api(log)
 
     # ---------- called by sources ----------
     def push(self, values, src=None):
@@ -214,7 +216,7 @@ class Bridge:
                     continue
                 t = m.get("t")
                 if t == "input" and isinstance(m.get("name"), str):
-                    name = "".join(ch for ch in m["name"] if ch.isalnum() or ch in "._-:@")
+                    name = "".join(ch for ch in m["name"] if ch.isalnum() or ch in "._-:@=,")
                     await self.trigger(name, m.get("a", "tap"))
                 elif t == "bios" and isinstance(m.get("id"), str):
                     await self.bios_input(m["id"], str(m.get("arg", "")))
@@ -268,7 +270,11 @@ class Bridge:
             writer.close()
             return
 
-        path = target.split("?", 1)[0]
+        path, _, query = target.partition("?")
+        if path.startswith("/api/"):
+            res = await self.api.handle(path, query)
+            await self.respond(writer, method, "200 OK", "application/json", json.dumps(res, separators=(",", ":")).encode())
+            return
         if path == "/bios/panel.json":
             c = self.cockpit()
             panel = c.panel if c else None
@@ -303,7 +309,8 @@ class Bridge:
     def demo_init(self):
         self.t0 = time.time()
         self.demo = {"gear": 1, "flaps": 0, "ap": 0, "hdg_bug": 90, "alt_sel": 5000, "vs_sel": 500,
-                     "crs": 90, "baro": 1013.25, "master_arm": 0, "chaff": 60, "flare": 30}
+                     "crs": 90, "baro": 1013.25, "master_arm": 0, "chaff": 60, "flare": 30,
+                     "door": 0, "scoop": 0, "tank": 100.0, "throttle": 75, "mixture": 90, "prop": 100}
         # sample AH-64D up-front display / keyboard / CMWS text for the Apache page
         eufd = ["ENGINE 1 OUT        |UHF  305.000  305.000", "                    |VHF  127.000  135.000",
                 "                    |FM1   30.000   30.000", "        TAIL WHEEL UNLOCKED  |FM2   30.000   30.000",
@@ -349,6 +356,13 @@ class Bridge:
             d["chaff"] = max(0, d["chaff"] - 1)
         elif n == "CM_FLARE":
             d["flare"] = max(0, d["flare"] - 1)
+        elif n in ("DROP_OPEN", "DROP_CLOSE"):
+            d["door"] = 100 if n == "DROP_OPEN" else 0
+        elif n in ("SCOOP_DOWN", "SCOOP_UP"):
+            d["scoop"] = 100 if n == "SCOOP_DOWN" else 0
+        elif n.startswith("K:THROTTLE_SET=") or n.startswith("K:MIXTURE_SET=") or n.startswith("K:PROP_PITCH_SET="):
+            k = {"THROTTLE": "throttle", "MIXTURE": "mixture", "PROP": "prop"}[n[2:].split("_")[0]]
+            d[k] = round(int(n.split("=")[1]) / 163.83)
 
     def demo_tick(self):
         t = time.time() - self.t0
@@ -372,6 +386,22 @@ class Bridge:
             "suction": 5.0, "cht": round(380 + 20 * S(t / 25)), "speedbrake": 0, "hook": 0,
             "com1_act": 118.3, "com1": 121.5, "nav1_act": 110.5, "nav1": 113.9, "baro_hg": round(d["baro"] / 33.8639, 2),
             "tas": round(122 + 25 * S(t / 13)), "gs": round(118 + 25 * S(t / 13)), "oat": 12,
+        })
+        # moving position (a lazy circle near Seattle) + nav radios + utility systems
+        ang = t / 240
+        d["tank"] = max(0.0, d["tank"] - (0.4 if d["door"] else 0)) if d["tank"] > 0 else 100.0
+        self.push({
+            "lat": round(47.53 + 0.12 * math.sin(ang), 6), "lon": round(-122.30 + 0.18 * math.cos(ang), 6),
+            "hdg_true": round((math.degrees(-ang) + 180) % 360, 1), "track": round((math.degrees(-ang) + 180) % 360, 1), "on_ground": 0,
+            "cdi": round(60 * S(t / 9)), "gsi": round(50 * S(t / 11)), "tofrom": 1, "has_gs": 1, "nav_ok": 1,
+            "adf_brg": round((40 + 30 * S(t / 17)) % 360, 1), "adf_ok": 1, "adf_freq": 362,
+            "com2_act": 119.9, "com2": 124.7, "nav2_act": 116.8, "nav2": 108.9, "xpdr": 1200, "xpdr_state": 4,
+            "throttle": d["throttle"], "mixture": d["mixture"], "prop": d["prop"], "trim": round(10 * S(t / 20), 1),
+            "fuel_sel": 1, "mag_l": 1, "mag_r": 1, "starter": 0, "manifold": 22.5, "prop_rpm": round(1900 + 50 * S(t / 7)),
+            "itt": round(690 + 30 * S(t / 9)), "fuel_press": 28, "fuel_total": round(38 - (t / 90) % 30, 1),
+            "zulu_time": (time.time() % 86400), "local_time": ((time.time() - 25200) % 86400), "wind_dir": 290, "wind_kt": 12,
+            "tank_pct": round(d["tank"], 1), "tank_gal": round(d["tank"] * 8), "drop_door": d["door"], "drop_flow": 9000 if d["door"] else 0,
+            "scoop": d["scoop"], "vel_x": round(2 * S(t / 5), 2), "vel_z": round(3 * S(t / 7), 2),
         })
 
 
