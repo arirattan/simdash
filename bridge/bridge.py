@@ -214,7 +214,7 @@ class Bridge:
                     continue
                 t = m.get("t")
                 if t == "input" and isinstance(m.get("name"), str):
-                    name = "".join(ch for ch in m["name"] if ch.isalnum() or ch in "._-")
+                    name = "".join(ch for ch in m["name"] if ch.isalnum() or ch in "._-:@")
                     await self.trigger(name, m.get("a", "tap"))
                 elif t == "bios" and isinstance(m.get("id"), str):
                     await self.bios_input(m["id"], str(m.get("arg", "")))
@@ -309,6 +309,11 @@ class Bridge:
         if action == "release":
             return
         d, n = self.demo, name.upper()
+        n = {"K:HEADING_BUG_INC": "HDG_INC", "K:HEADING_BUG_DEC": "HDG_DEC", "K:AP_ALT_VAR_INC": "ALT_INC",
+             "K:AP_ALT_VAR_DEC": "ALT_DEC", "K:KOHLSMAN_INC": "BARO_INC", "K:KOHLSMAN_DEC": "BARO_DEC",
+             "K:VOR1_OBI_INC": "CRS_INC", "K:VOR1_OBI_DEC": "CRS_DEC", "K:AP_MASTER": "AP_MASTER"}.get(n, n)
+        if n in ("ALT_INC_1000", "ALT_DEC_1000"):
+            d["alt_sel"] += 1000 if n == "ALT_INC_1000" else -1000
         step = {"HDG": ("hdg_bug", 1, 360), "ALT": ("alt_sel", 100, None), "VS": ("vs_sel", 100, None),
                 "CRS": ("crs", 1, 360), "BARO": ("baro", 1, None)}
         for pre, (k, s, wrap) in step.items():
@@ -355,6 +360,8 @@ class Bridge:
             "master_arm": d["master_arm"], "master_caution": 1 if int(t) % 20 < 3 else 0, "master_warning": 0,
             "chaff": d["chaff"], "flare": d["flare"], "gun": 578, "volts": 28.1, "amps": round(10 + 3 * S(t / 4), 1),
             "suction": 5.0, "cht": round(380 + 20 * S(t / 25)), "speedbrake": 0, "hook": 0,
+            "com1_act": 118.3, "com1": 121.5, "nav1_act": 110.5, "nav1": 113.9, "baro_hg": round(d["baro"] / 33.8639, 2),
+            "tas": round(122 + 25 * S(t / 13)), "gs": round(118 + 25 * S(t / 13)), "oat": 12,
         })
 
 

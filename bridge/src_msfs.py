@@ -343,8 +343,30 @@ class MsfsSource:
         return True
 
     # ---------------------------------------------------------------- send
+    def value_of(self, v):
+        """Numbers pass through; "$key", "$key+100", "$key-1000" read the current dashboard value."""
+        if isinstance(v, str) and v.startswith("$"):
+            m = re.match(r"^\$([a-z0-9_]+)\s*([+-]\s*[0-9.]+)?$", v)
+            if not m:
+                return 0
+            return float(self.b.state.get(m.group(1), 0) or 0) + float((m.group(2) or "0").replace(" ", ""))
+        return v
+
     async def input(self, name, action):
-        spec = self.cfg["events"].get(name)
+        if name.startswith("@"):
+            # direct cockpit input event from a panel, e.g. "@AS1000_PFD_1_FMS_Inner_Button"
+            if not self.connected or name[1:] not in self.ie:
+                return False
+            if action != "release":
+                await self.bios_input(name[1:], "1")
+            return True
+        if name.startswith("K:"):
+            # direct sim event from a panel, e.g. "K:G1000_PFD_SOFTKEY1" (fired on press)
+            spec = name[2:]
+            if not re.match(r"^[A-Z0-9_]+$", spec) or not self.connected:
+                return False
+        else:
+            spec = self.cfg["events"].get(name)
         if spec is None or not self.connected:
             return False
         head = spec if isinstance(spec, str) else str(spec[0])
@@ -356,9 +378,7 @@ class MsfsSource:
             return True
         if action == "release":  # K: events are one-shot, fired on press
             return True
-        event, value = (spec, 0) if isinstance(spec, str) else (spec[0], spec[1])
-        if isinstance(value, str) and value.startswith("$"):  # e.g. "$heading" = current value of a key
-            value = self.b.state.get(value[1:], 0)
+        event, value = (spec, 0) if isinstance(spec, str) else (spec[0], self.value_of(spec[1]))
         eid = self.events.get(event)
         if eid is None:
             eid = len(self.events) + 1

@@ -30,6 +30,14 @@ checks SimHub's folder, the MSFS SDK and MobiFlight. Gauges read SimVars, and bu
 so there are no key bindings to set up.
 Mapping: `bridge/msfs.json` (SimVar per gauge, sim event per button). Restart the bridge after editing it.
 
+**G1000 dashboard (MSFS):** a PFD and MFD bezel for G1000 aircraft (C172 G1000, 208B Grand Caravan, DA40…).
+It has softkeys 1–12, D→ / MENU / FPL / PROC / CLR / ENT, dual FMS / NAV / COM / ALT / BARO-CRS knobs, HDG (push = sync),
+RANGE (push = pan) and the GFC 700 autopilot keys. The keys fire the same sim events that MSFS's own G1000 cockpit
+template binds to each bezel control (e.g. `G1000_PFD_SOFTKEY3`, `G1000_MFD_ENTER_BUTTON`,
+`G1000_PFD_GROUP_KNOB_INC`), so no add-ons are needed. The screen area shows SimDash's own flight display; the Garmin
+screen itself stays in the sim. Drag a knob's outer ring or inner knob, tap its centre to push, or use ⟲ − + ⟳.
+FMS knob push has no sim event, so it presses the aircraft's input event instead (best effort).
+
 **Cockpit dashboard (MSFS):** when an aircraft loads, the bridge asks the sim for that aircraft's cockpit controls,
 the same ones you click in the 3D cockpit. They appear on the iPad grouped by system (LIGHTING, ELECTRICAL,
 AUTOPILOT…). Buttons press, switches flip and knobs step, and they stay in sync with the cockpit.

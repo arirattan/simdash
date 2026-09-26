@@ -114,6 +114,7 @@
           ap_master: d.ap, ap_hdg: d.ap, ap_alt: d.ap, ap_nav: 0, ap_vs: 0, ap_apr: 0, hdg_bug: d.hdg_bug, alt_sel: d.alt_sel,
           vs_sel: d.vs_sel, crs: d.crs, master_arm: d.master_arm, master_caution: Math.floor(t) % 20 < 3 ? 1 : 0, master_warning: 0,
           chaff: d.chaff, flare: d.flare, gun: 578, volts: 28.1, amps: 10 + 3 * S(t / 4), suction: 5, cht: 380 + 20 * S(t / 25),
+          com1_act: 118.3, com1: 121.5, nav1_act: 110.5, nav1: 113.9, baro_hg: d.baro / 33.8639, tas: 122 + 25 * S(t / 13), gs: 118 + 25 * S(t / 13), oat: 12,
           speedbrake: 0, hook: 0
         });
       };
@@ -133,7 +134,12 @@
     },
     input(name, a) {
       if (a === 'release') return;
-      const d = this.d, n = name.toUpperCase();
+      const d = this.d;
+      let n = name.toUpperCase();
+      n = { 'K:HEADING_BUG_INC': 'HDG_INC', 'K:HEADING_BUG_DEC': 'HDG_DEC', 'K:AP_ALT_VAR_INC': 'ALT_INC', 'K:AP_ALT_VAR_DEC': 'ALT_DEC',
+            'K:KOHLSMAN_INC': 'BARO_INC', 'K:KOHLSMAN_DEC': 'BARO_DEC', 'K:VOR1_OBI_INC': 'CRS_INC', 'K:VOR1_OBI_DEC': 'CRS_DEC', 'K:AP_MASTER': 'AP_MASTER' }[n] || n;
+      if (n === 'ALT_INC_1000') d.alt_sel += 1000;
+      if (n === 'ALT_DEC_1000') d.alt_sel -= 1000;
       const knobs = { HDG: ['hdg_bug', 1, 360], ALT: ['alt_sel', 100], VS: ['vs_sel', 100], CRS: ['crs', 1, 360], BARO: ['baro', 1] };
       for (const p in knobs) {
         const [k, s, wrap] = knobs[p];

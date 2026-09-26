@@ -128,7 +128,7 @@
     };
     k.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      k.setPointerCapture(e.pointerId);
+      try { k.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or ended pointer */ }
       active = { a: angleOf(e), y: e.clientY, acc: 0 };
       moved = 0;
       k.classList.add('grab');
@@ -269,5 +269,93 @@
     };
   }
 
-  global.Controls = { Button, Toggle, Guarded, Knob, GearLever, Selector, CountButton, tapInput };
+  // ------------------------------------------------------------------ //
+  // Dual concentric knob (Garmin style): drag the outer ring or the inner
+  // knob, tap the centre to push. Small −/+ buttons for each ring as well.
+  // o: { text, outer: {inc, dec, label}, inner: {inc, dec, label}, push, key, format, size }
+  // ------------------------------------------------------------------ //
+  function DualKnob(o) {
+    const w = el('div', { class: 'dknob-wrap' + (o.size ? ' ' + o.size : '') });
+    if (o.text) el('div', { class: 'knob-title', text: o.text }, w);
+    const readout = o.key ? el('div', { class: 'knob-readout' }, w) : null;
+    const k = el('div', { class: 'dknob' }, w);
+    const ring = el('div', { class: 'dknob-outer' }, k);
+    el('div', { class: 'knob-mark' }, ring);
+    const inner = el('div', { class: 'dknob-inner' }, k);
+    el('div', { class: 'knob-mark' }, inner);
+    if (o.push) el('div', { class: 'dknob-push', text: o.pushLabel || 'PUSH' }, inner);
+    const rot = { outer: 0, inner: 0 };
+    const detent = 20;
+    const send = (zone, dir) => {
+      const z = o[zone];
+      if (!z) return;
+      rot[zone] += dir * detent;
+      (zone === 'outer' ? ring : inner).style.transform = `rotate(${rot[zone]}deg)`;
+      tapInput(dir > 0 ? z.inc : z.dec, 40);
+    };
+    let act = null;
+    const center = () => { const r = k.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width / 2]; };
+    k.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      try { k.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or ended pointer */ }
+      const [cx, cy, R] = center();
+      const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
+      act = { zone: dist > R * 0.58 ? 'outer' : 'inner', a: Math.atan2(e.clientX - cx, cy - e.clientY) * 180 / Math.PI, y: e.clientY, acc: 0, moved: 0 };
+      k.classList.add('grab-' + act.zone);
+    });
+    k.addEventListener('pointermove', (e) => {
+      if (!act) return;
+      const [cx, cy] = center();
+      const a = Math.atan2(e.clientX - cx, cy - e.clientY) * 180 / Math.PI;
+      let d = a - act.a;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      const r = Math.hypot(e.clientX - cx, e.clientY - cy);
+      act.acc += r > 14 ? d : (act.y - e.clientY) * 1.2;
+      act.a = a;
+      act.y = e.clientY;
+      while (Math.abs(act.acc) >= detent) {
+        const dir = Math.sign(act.acc);
+        act.acc -= dir * detent;
+        act.moved++;
+        send(act.zone, dir);
+      }
+    });
+    const end = () => {
+      if (!act) return;
+      k.classList.remove('grab-outer', 'grab-inner');
+      if (!act.moved && act.zone === 'inner' && o.push) {
+        tapInput(o.push);
+        inner.classList.add('pushed');
+        setTimeout(() => inner.classList.remove('pushed'), 150);
+      }
+      act = null;
+    };
+    k.addEventListener('pointerup', end);
+    k.addEventListener('pointercancel', end);
+    // step buttons: outer −/+ and inner −/+
+    const steps = el('div', { class: 'dknob-steps' }, w);
+    const stepBtn = (zone, dir, label) => {
+      if (!o[zone]) return;
+      const b = el('button', { class: 'step ' + zone, type: 'button', text: label }, steps);
+      let t1, t2;
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); send(zone, dir); t1 = setTimeout(() => { t2 = setInterval(() => send(zone, dir), 80); }, 400); });
+      const stop = () => { clearTimeout(t1); clearInterval(t2); };
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => b.addEventListener(ev, stop));
+    };
+    stepBtn('outer', -1, '⟲');
+    stepBtn('inner', -1, '−');
+    stepBtn('inner', 1, '+');
+    stepBtn('outer', 1, '⟳');
+    return {
+      el: w, keys: o.keys || (o.key ? [o.key] : []),
+      update(s) {
+        if (!readout) return;
+        const v = s[o.key];
+        readout.textContent = o.format ? o.format(s) : (v === undefined ? '---' : Math.round(v));
+      }
+    };
+  }
+
+  global.Controls = { Button, Toggle, Guarded, Knob, GearLever, Selector, CountButton, DualKnob, tapInput };
 })(window);
