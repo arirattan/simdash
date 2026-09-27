@@ -91,6 +91,9 @@ checks SimHub's folder, the MSFS SDK and MobiFlight. Gauges read SimVars, and bu
 so there are no key bindings to set up.
 Mapping: `bridge/msfs.json` (SimVar per gauge, sim event per button). Restart the bridge after editing it.
 
+**Desktop icon:** double-click **`create-shortcut.bat`** once. It puts a **SimDash** shortcut on the desktop that
+runs `start-bridge.bat`, with an attitude-indicator icon (`simdash.ico`). Right-click it to pin it to the taskbar or Start.
+
 **G1000 dashboard (MSFS):** a PFD and MFD bezel for G1000 aircraft (C172 G1000, 208B Grand Caravan, DA40…).
 It has softkeys 1–12, D→ / MENU / FPL / PROC / CLR / ENT, dual FMS / NAV / COM / ALT / BARO-CRS knobs, HDG (push = sync),
 RANGE (push = pan) and the GFC 700 autopilot keys. Drag a knob's outer ring or inner knob, tap its centre to push,
@@ -245,6 +248,7 @@ the clicks are muted too.
 ```
 start-bridge.bat          MSFS + DCS (direct)
 start-demo.bat            fake data, try the iPad side
+create-shortcut.bat       desktop shortcut to start-bridge.bat with the gauge icon (simdash.ico)
 install-dcs.bat           installs SimDash.lua into DCS (--uninstall to remove)
 setup-screens.bat         DCS display export for live screens (FLIR, radar, MFDs)
 install-screen-capture.bat  lets MSFS pop-outs stay hidden while the iPad shows them (windows-capture)
